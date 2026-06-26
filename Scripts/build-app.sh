@@ -3,6 +3,7 @@ set -euo pipefail
 
 ROOT_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")/.." && pwd)"
 CONFIGURATION="${CONFIGURATION:-release}"
+swift build -c "$CONFIGURATION" --package-path "$ROOT_DIR"
 BUILD_DIR="$(swift build -c "$CONFIGURATION" --show-bin-path)"
 APP_DIR="$ROOT_DIR/.build/OffTick.app"
 CONTENTS_DIR="$APP_DIR/Contents"

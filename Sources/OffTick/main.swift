@@ -4,7 +4,6 @@ import UserNotifications
 
 final class OffTickApp: NSObject, NSApplicationDelegate {
     private let statusItemAutosaveName = "dev.local.OffTick.statusItem"
-    private let statusItemTitle = "OffTick"
     private var statusItem: NSStatusItem!
     private var panel: NSPanel!
     private var stackView: NSStackView!
@@ -121,7 +120,7 @@ final class OffTickApp: NSObject, NSApplicationDelegate {
     }
 
     private func setupStatusItem() {
-        statusItem = NSStatusBar.system.statusItem(withLength: NSStatusItem.variableLength)
+        statusItem = NSStatusBar.system.statusItem(withLength: NSStatusItem.squareLength)
         statusItem.autosaveName = statusItemAutosaveName
         configureStatusItemButton(toolTip: "OffTick")
 
@@ -138,15 +137,15 @@ final class OffTickApp: NSObject, NSApplicationDelegate {
 
     private func configureStatusItemButton(toolTip: String) {
         statusItem.isVisible = true
-        statusItem.length = NSStatusItem.variableLength
+        statusItem.length = NSStatusItem.squareLength
 
         guard let button = statusItem.button else {
             return
         }
 
-        button.title = statusItemTitle
+        button.title = ""
         button.image = statusIcon()
-        button.imagePosition = .imageLeading
+        button.imagePosition = .imageOnly
         button.toolTip = toolTip
     }
 
