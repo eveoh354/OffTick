@@ -179,6 +179,7 @@ final class OffTickApp: NSObject, NSApplicationDelegate {
         panel.isMovableByWindowBackground = true
         panel.backgroundColor = .clear
         panel.isOpaque = false
+        applyPanelScreenshotSharing()
 
         stackView = NSStackView()
         stackView.orientation = .vertical
@@ -364,7 +365,7 @@ final class OffTickApp: NSObject, NSApplicationDelegate {
 
     private func renderSettings() {
         clearStack()
-        panel.setContentSize(NSSize(width: 340, height: 552))
+        panel.setContentSize(NSSize(width: 340, height: 584))
 
         let title = makeLabel(t("settings"), size: 18, weight: .semibold)
         stackView.addArrangedSubview(title)
@@ -475,8 +476,12 @@ final class OffTickApp: NSObject, NSApplicationDelegate {
         let endField = NSTextField(string: dateFormatter.string(from: now))
         [startField, endField].forEach {
             $0.placeholderString = "yyyy-MM-dd"
+            $0.bezelStyle = .roundedBezel
+            $0.controlSize = .regular
             $0.font = .monospacedDigitSystemFont(ofSize: 13, weight: .regular)
+            $0.translatesAutoresizingMaskIntoConstraints = false
             $0.widthAnchor.constraint(equalToConstant: 120).isActive = true
+            $0.heightAnchor.constraint(equalToConstant: 24).isActive = true
         }
 
         let stack = NSStackView()
@@ -486,10 +491,19 @@ final class OffTickApp: NSObject, NSApplicationDelegate {
         stack.addArrangedSubview(makeRow(label: t("exportStartDate"), control: startField, suffix: nil))
         stack.addArrangedSubview(makeRow(label: t("exportEndDate"), control: endField, suffix: nil))
 
+        let accessoryView = NSView(frame: NSRect(x: 0, y: 0, width: 320, height: 64))
+        accessoryView.addSubview(stack)
+        NSLayoutConstraint.activate([
+            stack.leadingAnchor.constraint(equalTo: accessoryView.leadingAnchor),
+            stack.trailingAnchor.constraint(equalTo: accessoryView.trailingAnchor),
+            stack.topAnchor.constraint(equalTo: accessoryView.topAnchor),
+            stack.bottomAnchor.constraint(equalTo: accessoryView.bottomAnchor)
+        ])
+
         let alert = NSAlert()
         alert.messageText = t("exportUnlockRecords")
         alert.informativeText = t("exportUnlockRecordsHint")
-        alert.accessoryView = stack
+        alert.accessoryView = accessoryView
         alert.addButton(withTitle: t("export"))
         alert.addButton(withTitle: t("cancel"))
 
@@ -860,6 +874,20 @@ final class OffTickApp: NSObject, NSApplicationDelegate {
     @objc private func timeFormatChanged(_ sender: NSSegmentedControl) {
         settings.timeFormat = sender.selectedSegment == 0 ? .twentyFourHour : .twelveHour
         settings.save()
+    }
+
+    @objc private func screenshotSharingChanged(_ sender: NSButton) {
+        settings.includePanelInScreenshots = sender.state == .on
+        settings.save()
+        applyPanelScreenshotSharing()
+    }
+
+    private func applyPanelScreenshotSharing() {
+        guard panel != nil else {
+            return
+        }
+
+        panel.sharingType = settings.includePanelInScreenshots ? .readOnly : .none
     }
 
     @objc private func calendarModeChanged(_ sender: NSSegmentedControl) {
