@@ -1988,7 +1988,6 @@ enum UnlockRecordsPDFExporter {
 
         NSColor.white.setFill()
         NSBezierPath(rect: rect).fill()
-        drawWatermark(in: rect)
 
         let titleAttributes: [NSAttributedString.Key: Any] = [
             .font: NSFont.boldSystemFont(ofSize: 22),
@@ -2008,6 +2007,12 @@ enum UnlockRecordsPDFExporter {
         ]
 
         let margin: CGFloat = 54
+        let startIndex = pageIndex * rowsPerPage
+        let endIndex = min(records.count, startIndex + rowsPerPage)
+        let pageRecords = records[startIndex..<endIndex]
+        let contentBottom = CGFloat(178 + (max(1, pageRecords.count) * 22))
+        drawWatermarks(in: CGRect(x: margin, y: 38, width: rect.width - (margin * 2), height: min(contentBottom + 18, rect.height - 96) - 38))
+
         let rangeText = "\(dateString(startDate)) - \(dateString(endDate))"
         ("OffTick Unlock Records" as NSString).draw(at: NSPoint(x: margin, y: 46), withAttributes: titleAttributes)
         ("Range: \(rangeText)    Generated: \(dateTimeString(Date()))    Bundle: \(Bundle.main.bundleIdentifier ?? "unknown")" as NSString)
@@ -2021,9 +2026,6 @@ enum UnlockRecordsPDFExporter {
         ("Recorded At" as NSString).draw(at: NSPoint(x: margin + 330, y: 138), withAttributes: headerAttributes)
         drawLine(from: CGPoint(x: margin, y: 160), to: CGPoint(x: rect.width - margin, y: 160))
 
-        let startIndex = pageIndex * rowsPerPage
-        let endIndex = min(records.count, startIndex + rowsPerPage)
-        let pageRecords = records[startIndex..<endIndex]
         var y: CGFloat = 178
         for record in pageRecords {
             (record.dateKey as NSString).draw(at: NSPoint(x: margin, y: y), withAttributes: bodyAttributes)
@@ -2041,20 +2043,31 @@ enum UnlockRecordsPDFExporter {
         NSGraphicsContext.restoreGraphicsState()
     }
 
-    private static func drawWatermark(in rect: CGRect) {
+    private static func drawWatermarks(in rect: CGRect) {
         let attributes: [NSAttributedString.Key: Any] = [
-            .font: NSFont.boldSystemFont(ofSize: 76),
-            .foregroundColor: NSColor.black.withAlphaComponent(0.055)
+            .font: NSFont.boldSystemFont(ofSize: 28),
+            .foregroundColor: NSColor.black.withAlphaComponent(0.04)
         ]
         let text = "OffTick"
         let size = (text as NSString).size(withAttributes: attributes)
-        NSGraphicsContext.saveGraphicsState()
-        let transform = NSAffineTransform()
-        transform.translateX(by: rect.midX, yBy: rect.midY)
-        transform.rotate(byDegrees: -28)
-        transform.concat()
-        (text as NSString).draw(at: NSPoint(x: -size.width / 2, y: -size.height / 2), withAttributes: attributes)
-        NSGraphicsContext.restoreGraphicsState()
+        let xStep: CGFloat = 132
+        let yStep: CGFloat = 48
+
+        var y = rect.minY + 8
+        while y < rect.maxY {
+            var x = rect.minX + 18
+            while x < rect.maxX {
+                NSGraphicsContext.saveGraphicsState()
+                let transform = NSAffineTransform()
+                transform.translateX(by: x, yBy: y)
+                transform.rotate(byDegrees: -24)
+                transform.concat()
+                (text as NSString).draw(at: NSPoint(x: -size.width / 2, y: -size.height / 2), withAttributes: attributes)
+                NSGraphicsContext.restoreGraphicsState()
+                x += xStep
+            }
+            y += yStep
+        }
     }
 
     private static func drawLine(from start: CGPoint, to end: CGPoint) {
