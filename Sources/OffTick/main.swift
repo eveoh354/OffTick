@@ -1,6 +1,7 @@
 import AppKit
 import Darwin
 import IOKit
+import ServiceManagement
 import UniformTypeIdentifiers
 import UserNotifications
 
@@ -378,7 +379,7 @@ final class OffTickApp: NSObject, NSApplicationDelegate {
 
     private func renderSettings() {
         clearStack()
-        panel.setContentSize(NSSize(width: 340, height: 612))
+        panel.setContentSize(NSSize(width: 340, height: 666))
 
         let title = makeLabel(t("settings"), size: 18, weight: .semibold)
         stackView.addArrangedSubview(title)
@@ -412,7 +413,13 @@ final class OffTickApp: NSObject, NSApplicationDelegate {
         stackView.addArrangedSubview(makeCheckbox(title: t("countdown"), isOn: settings.showCountdownInPanel, action: #selector(panelContentChanged(_:)), tag: PanelContentField.countdown.rawValue))
         stackView.addArrangedSubview(makeCheckbox(title: t("earnedIncome"), isOn: settings.showEarnedIncomeInPanel, action: #selector(panelContentChanged(_:)), tag: PanelContentField.earnedIncome.rawValue))
         stackView.addArrangedSubview(makeCheckbox(title: t("dailyIncome"), isOn: settings.showDailyIncomeInPanel, action: #selector(panelContentChanged(_:)), tag: PanelContentField.dailyIncome.rawValue))
+
+        stackView.addArrangedSubview(makeSeparator())
+        stackView.addArrangedSubview(makeSectionTitle(t("options")))
         stackView.addArrangedSubview(makeCheckbox(title: t("includePanelInScreenshots"), isOn: settings.includePanelInScreenshots, action: #selector(screenshotSharingChanged(_:)), tag: 0))
+        let launchAtLoginCheckbox = makeCheckbox(title: t("launchAtLogin"), isOn: LoginItemController.isEnabled, action: #selector(launchAtLoginChanged(_:)), tag: 0)
+        launchAtLoginCheckbox.isEnabled = LoginItemController.isSupported
+        stackView.addArrangedSubview(launchAtLoginCheckbox)
 
         stackView.addArrangedSubview(makeSeparator())
         stackView.addArrangedSubview(makeSectionTitle(t("income")))
@@ -941,6 +948,20 @@ final class OffTickApp: NSObject, NSApplicationDelegate {
         panel.sharingType = settings.includePanelInScreenshots ? .readOnly : .none
     }
 
+    @objc private func launchAtLoginChanged(_ sender: NSButton) {
+        do {
+            try LoginItemController.setEnabled(sender.state == .on)
+            if LoginItemController.requiresApproval {
+                showMessage(title: t("launchAtLoginApprovalRequired"), message: t("launchAtLoginApprovalRequiredHint"))
+            }
+        } catch {
+            sender.state = LoginItemController.isEnabled ? .on : .off
+            showMessage(title: t("launchAtLoginFailed"), message: error.localizedDescription)
+        }
+
+        renderSettings()
+    }
+
     @objc private func calendarModeChanged(_ sender: NSSegmentedControl) {
         settings.calendarMode = sender.selectedSegment == 0 ? .gregorian : .lunar
         settings.save()
@@ -1441,10 +1462,12 @@ enum L10n {
             "panelSizeMedium": "中",
             "panelSizeLarge": "大",
             "panelContent": "悬浮窗内容",
+            "options": "选项",
             "countdown": "下班倒计时",
             "earnedIncome": "今日实时收入",
             "dailyIncome": "日均收入",
             "includePanelInScreenshots": "截图时包含悬浮窗",
+            "launchAtLogin": "开机自启动",
             "income": "收入",
             "monthlyIncome": "月薪",
             "workdaysInMonth": "本月工作日",
@@ -1481,13 +1504,16 @@ enum L10n {
             "exportComplete": "导出完成",
             "exportFailed": "导出失败",
             "networkTimeUnavailable": "网络时间不可用",
-            "networkTimeUnavailableHint": "OffTick 暂时无法校准网络时间，请联网后再导出。"
+            "networkTimeUnavailableHint": "OffTick 暂时无法校准网络时间，请联网后再导出。",
+            "launchAtLoginFailed": "开机自启动设置失败",
+            "launchAtLoginApprovalRequired": "需要系统确认",
+            "launchAtLoginApprovalRequiredHint": "请在“系统设置 > 通用 > 登录项”里允许 OffTick 后，开机自启动才会生效。"
         ],
         .traditionalChinese: [
             "settings": "設定", "hidePanel": "隱藏懸浮窗", "showPanel": "顯示懸浮窗", "quit": "退出 OffTick", "display": "顯示", "language": "語言", "time": "時間", "date": "日期", "hour24": "24小時", "hour12": "12小時", "gregorian": "國曆", "lunar": "農曆", "panelSize": "懸浮窗大小", "panelSizeSmall": "小", "panelSizeMedium": "中", "panelSizeLarge": "大", "panelContent": "懸浮窗內容", "countdown": "下班倒數", "earnedIncome": "今日即時收入", "dailyIncome": "日均收入", "income": "收入", "monthlyIncome": "月薪", "workdaysInMonth": "本月工作日", "timer": "計時", "workMode": "計算方式", "fixedClockOut": "固定下班", "unlockTimer": "解鎖計時", "startTime": "上班時間", "clockOutTime": "下班時間", "dailyHours": "每日時長", "done": "完成", "resetDefault": "恢復預設", "syncingTime": "正在校準網路時間...", "noPanelContent": "未選擇懸浮窗內容", "currentTime": "目前時間", "waitingIncome": "收入：等待網路時間", "waitingUnlock": "等待今日5點後首次解鎖", "clockOutNotificationTitle": "下班啦", "clockOutNotificationBody": "今天辛苦了，OffTick 已經幫你數到下班時間。", "yuan": "元", "days": "天", "hoursUnit": "小時"
         ],
         .english: [
-            "settings": "Settings", "hidePanel": "Hide Floating Window", "showPanel": "Show Floating Window", "quit": "Quit OffTick", "display": "Display", "language": "Language", "time": "Time", "date": "Date", "hour24": "24-hour", "hour12": "12-hour", "gregorian": "Gregorian", "lunar": "Lunar", "panelSize": "Window Size", "panelSizeSmall": "Small", "panelSizeMedium": "Medium", "panelSizeLarge": "Large", "panelContent": "Floating Window", "countdown": "Clock-out Countdown", "earnedIncome": "Live Earnings", "dailyIncome": "Daily Income", "includePanelInScreenshots": "Include floating window in screenshots", "income": "Income", "monthlyIncome": "Monthly Income", "workdaysInMonth": "Workdays", "timer": "Timer", "workMode": "Mode", "fixedClockOut": "Fixed Clock-out", "unlockTimer": "Unlock Timer", "startTime": "Start Time", "clockOutTime": "Clock-out Time", "dailyHours": "Daily Hours", "done": "Done", "resetDefault": "Reset Defaults", "syncingTime": "Syncing network time...", "noPanelContent": "No floating content selected", "currentTime": "Current Time", "waitingIncome": "Income: waiting for network time", "waitingUnlock": "Waiting for first unlock after 5 AM", "clockOutNotificationTitle": "Time to clock out", "clockOutNotificationBody": "Nice work today. OffTick has counted down to your clock-out time.", "yuan": "CNY", "days": "days", "hoursUnit": "hours", "unlockRecords": "Unlock Records", "exportUnlockRecords": "Export Unlock Records", "exportUnlockRecordsHint": "Enter the export date range in yyyy-MM-dd format.", "exportStartDate": "Start Date", "exportEndDate": "End Date", "export": "Export", "cancel": "Cancel", "invalidDateRange": "Invalid Date Range", "dateRangeFormatHint": "Use yyyy-MM-dd and make sure the start date is not after the end date.", "noUnlockRecords": "No Unlock Records", "noUnlockRecordsHint": "No first unlock after 5 AM was recorded in the selected range.", "exportComplete": "Export Complete", "exportFailed": "Export Failed", "networkTimeUnavailable": "Network Time Unavailable", "networkTimeUnavailableHint": "OffTick could not sync network time. Connect to the internet and try exporting again."
+            "settings": "Settings", "hidePanel": "Hide Floating Window", "showPanel": "Show Floating Window", "quit": "Quit OffTick", "display": "Display", "language": "Language", "time": "Time", "date": "Date", "hour24": "24-hour", "hour12": "12-hour", "gregorian": "Gregorian", "lunar": "Lunar", "panelSize": "Window Size", "panelSizeSmall": "Small", "panelSizeMedium": "Medium", "panelSizeLarge": "Large", "panelContent": "Floating Window", "options": "Options", "countdown": "Clock-out Countdown", "earnedIncome": "Live Earnings", "dailyIncome": "Daily Income", "includePanelInScreenshots": "Include floating window in screenshots", "launchAtLogin": "Launch at login", "income": "Income", "monthlyIncome": "Monthly Income", "workdaysInMonth": "Workdays", "timer": "Timer", "workMode": "Mode", "fixedClockOut": "Fixed Clock-out", "unlockTimer": "Unlock Timer", "startTime": "Start Time", "clockOutTime": "Clock-out Time", "dailyHours": "Daily Hours", "done": "Done", "resetDefault": "Reset Defaults", "syncingTime": "Syncing network time...", "noPanelContent": "No floating content selected", "currentTime": "Current Time", "waitingIncome": "Income: waiting for network time", "waitingUnlock": "Waiting for first unlock after 5 AM", "clockOutNotificationTitle": "Time to clock out", "clockOutNotificationBody": "Nice work today. OffTick has counted down to your clock-out time.", "yuan": "CNY", "days": "days", "hoursUnit": "hours", "unlockRecords": "Unlock Records", "exportUnlockRecords": "Export Unlock Records", "exportUnlockRecordsHint": "Enter the export date range in yyyy-MM-dd format.", "exportStartDate": "Start Date", "exportEndDate": "End Date", "export": "Export", "cancel": "Cancel", "invalidDateRange": "Invalid Date Range", "dateRangeFormatHint": "Use yyyy-MM-dd and make sure the start date is not after the end date.", "noUnlockRecords": "No Unlock Records", "noUnlockRecordsHint": "No first unlock after 5 AM was recorded in the selected range.", "exportComplete": "Export Complete", "exportFailed": "Export Failed", "networkTimeUnavailable": "Network Time Unavailable", "networkTimeUnavailableHint": "OffTick could not sync network time. Connect to the internet and try exporting again.", "launchAtLoginFailed": "Could not update launch at login", "launchAtLoginApprovalRequired": "Approval Required", "launchAtLoginApprovalRequiredHint": "Allow OffTick in System Settings > General > Login Items before launch at login takes effect."
         ],
         .japanese: [
             "settings": "設定", "hidePanel": "フローティングウィンドウを隠す", "showPanel": "フローティングウィンドウを表示", "quit": "OffTick を終了", "display": "表示", "language": "言語", "time": "時刻", "date": "日付", "hour24": "24時間", "hour12": "12時間", "gregorian": "西暦", "lunar": "旧暦", "panelSize": "ウィンドウサイズ", "panelSizeSmall": "小", "panelSizeMedium": "中", "panelSizeLarge": "大", "panelContent": "表示内容", "countdown": "退勤カウントダウン", "earnedIncome": "本日のリアルタイム収入", "dailyIncome": "日収", "income": "収入", "monthlyIncome": "月収", "workdaysInMonth": "今月の出勤日", "timer": "タイマー", "workMode": "計算方式", "fixedClockOut": "固定退勤", "unlockTimer": "ロック解除計時", "startTime": "始業時刻", "clockOutTime": "退勤時刻", "dailyHours": "1日の勤務時間", "done": "完了", "resetDefault": "初期値に戻す", "syncingTime": "ネットワーク時刻を同期中...", "noPanelContent": "表示内容が選択されていません", "currentTime": "現在時刻", "waitingIncome": "収入：時刻同期待ち", "waitingUnlock": "今日5時以降の初回ロック解除待ち", "clockOutNotificationTitle": "退勤時間です", "clockOutNotificationBody": "今日もお疲れさまでした。OffTick が退勤時間を知らせます。", "yuan": "元", "days": "日", "hoursUnit": "時間"
@@ -1547,6 +1573,48 @@ final class NotificationCoordinator {
             DispatchQueue.main.async {
                 NSHapticFeedbackManager.defaultPerformer.perform(.generic, performanceTime: .now)
             }
+        }
+    }
+}
+
+enum LoginItemController {
+    static var isSupported: Bool {
+        if #available(macOS 13.0, *) {
+            return true
+        }
+
+        return false
+    }
+
+    static var isEnabled: Bool {
+        if #available(macOS 13.0, *) {
+            return SMAppService.mainApp.status == .enabled || SMAppService.mainApp.status == .requiresApproval
+        }
+
+        return false
+    }
+
+    static var requiresApproval: Bool {
+        if #available(macOS 13.0, *) {
+            return SMAppService.mainApp.status == .requiresApproval
+        }
+
+        return false
+    }
+
+    static func setEnabled(_ isEnabled: Bool) throws {
+        guard #available(macOS 13.0, *) else {
+            throw NSError(
+                domain: "OffTick",
+                code: 1,
+                userInfo: [NSLocalizedDescriptionKey: "Launch at login requires macOS 13 or later."]
+            )
+        }
+
+        if isEnabled {
+            try SMAppService.mainApp.register()
+        } else {
+            try SMAppService.mainApp.unregister()
         }
     }
 }
