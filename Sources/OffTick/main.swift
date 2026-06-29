@@ -1977,11 +1977,11 @@ enum UnlockRecordsPDFExporter {
         settings: WorkSettings
     ) {
         NSGraphicsContext.saveGraphicsState()
-        let graphicsContext = NSGraphicsContext(cgContext: context, flipped: false)
-        NSGraphicsContext.current = graphicsContext
         context.saveGState()
         context.translateBy(x: 0, y: rect.height)
         context.scaleBy(x: 1, y: -1)
+        let graphicsContext = NSGraphicsContext(cgContext: context, flipped: true)
+        NSGraphicsContext.current = graphicsContext
 
         NSColor.white.setFill()
         NSBezierPath(rect: rect).fill()
