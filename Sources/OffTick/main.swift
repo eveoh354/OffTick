@@ -398,11 +398,13 @@ final class OffTickApp: NSObject, NSApplicationDelegate {
         timeFormatControl.widthAnchor.constraint(equalToConstant: 170).isActive = true
         stackView.addArrangedSubview(makeRow(label: t("time"), control: timeFormatControl, suffix: nil))
 
-        let calendarControl = NSSegmentedControl(labels: [t("gregorian"), t("lunar")], trackingMode: .selectOne, target: self, action: #selector(calendarModeChanged(_:)))
-        calendarControl.selectedSegment = settings.calendarMode == .gregorian ? 0 : 1
-        calendarControl.translatesAutoresizingMaskIntoConstraints = false
-        calendarControl.widthAnchor.constraint(equalToConstant: 170).isActive = true
-        stackView.addArrangedSubview(makeRow(label: t("date"), control: calendarControl, suffix: nil))
+        if settings.language.supportsLunarCalendar {
+            let calendarControl = NSSegmentedControl(labels: [t("gregorian"), t("lunar")], trackingMode: .selectOne, target: self, action: #selector(calendarModeChanged(_:)))
+            calendarControl.selectedSegment = settings.calendarMode == .gregorian ? 0 : 1
+            calendarControl.translatesAutoresizingMaskIntoConstraints = false
+            calendarControl.widthAnchor.constraint(equalToConstant: 170).isActive = true
+            stackView.addArrangedSubview(makeRow(label: t("date"), control: calendarControl, suffix: nil))
+        }
 
         let panelSizeControl = NSSegmentedControl(labels: PanelSizeMode.allCases.map { t($0.titleKey) }, trackingMode: .selectOne, target: self, action: #selector(panelSizeChanged(_:)))
         panelSizeControl.selectedSegment = PanelSizeMode.allCases.firstIndex(of: settings.panelSize) ?? 1
@@ -1255,6 +1257,9 @@ final class OffTickApp: NSObject, NSApplicationDelegate {
 
     private func changeLanguage(to language: AppLanguage) {
         settings.language = language
+        if !language.supportsLunarCalendar {
+            settings.calendarMode = .gregorian
+        }
         settings.save()
         refreshPanelContextMenu()
         updateContent()
@@ -1760,6 +1765,15 @@ enum AppLanguage: Int, CaseIterable {
         case .german: return "de_DE"
         case .portuguese: return "pt_BR"
         case .russian: return "ru_RU"
+        }
+    }
+
+    var supportsLunarCalendar: Bool {
+        switch self {
+        case .simplifiedChinese, .traditionalChinese, .japanese, .korean:
+            return true
+        case .english, .spanish, .french, .german, .portuguese, .russian:
+            return false
         }
     }
 
@@ -2472,6 +2486,7 @@ struct WorkSettings {
 
     private func sanitized() -> WorkSettings {
         let normalizedExportDirectoryPath = exportDirectoryPath?.trimmingCharacters(in: .whitespacesAndNewlines)
+        let sanitizedCalendarMode: CalendarMode = language.supportsLunarCalendar ? calendarMode : .gregorian
         return WorkSettings(
             monthlyIncome: max(0, monthlyIncome),
             currencyUnit: currencyUnit,
@@ -2483,7 +2498,7 @@ struct WorkSettings {
             fixedClockOutMinute: min(max(0, fixedClockOutMinute), 59),
             mode: mode,
             timeFormat: timeFormat,
-            calendarMode: calendarMode,
+            calendarMode: sanitizedCalendarMode,
             panelSize: panelSize,
             language: language,
             showDateInPanel: showDateInPanel,
