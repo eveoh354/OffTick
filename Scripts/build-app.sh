@@ -6,6 +6,7 @@ CONFIGURATION="${CONFIGURATION:-release}"
 BUNDLE_ID="${BUNDLE_ID:-online.eveoh.offtick}"
 MARKETING_VERSION="${MARKETING_VERSION:-0.1.1}"
 BUILD_VERSION="${BUILD_VERSION:-1}"
+
 swift build -c "$CONFIGURATION" --package-path "$ROOT_DIR"
 BUILD_DIR="$(swift build -c "$CONFIGURATION" --show-bin-path)"
 APP_DIR="$ROOT_DIR/.build/OffTick.app"
@@ -17,6 +18,7 @@ rm -rf "$APP_DIR"
 mkdir -p "$MACOS_DIR" "$RESOURCES_DIR"
 
 cp "$BUILD_DIR/OffTick" "$MACOS_DIR/OffTick"
+cp "$ROOT_DIR/Sources/OffTick/Resources/AppIcon.icns" "$RESOURCES_DIR/AppIcon.icns"
 
 if [[ -d "$BUILD_DIR/OffTick_OffTick.bundle" ]]; then
     cp -R "$BUILD_DIR/OffTick_OffTick.bundle" "$RESOURCES_DIR/"
@@ -35,6 +37,8 @@ cat > "$CONTENTS_DIR/Info.plist" <<'PLIST'
     <string>OffTick</string>
     <key>CFBundleDisplayName</key>
     <string>OffTick</string>
+    <key>CFBundleIconFile</key>
+    <string>AppIcon</string>
     <key>CFBundlePackageType</key>
     <string>APPL</string>
     <key>CFBundleShortVersionString</key>

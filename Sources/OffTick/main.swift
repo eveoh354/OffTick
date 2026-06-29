@@ -167,7 +167,12 @@ final class OffTickApp: NSObject, NSApplicationDelegate {
     }
 
     private func statusIcon() -> NSImage? {
-        let image = NSImage(systemSymbolName: "clock", accessibilityDescription: "OffTick")
+        let image: NSImage?
+        if let url = Bundle.module.url(forResource: "OffTickStatusTemplate", withExtension: "png") {
+            image = NSImage(contentsOf: url)
+        } else {
+            image = NSImage(systemSymbolName: "clock", accessibilityDescription: "OffTick")
+        }
         image?.size = NSSize(width: 18, height: 18)
         image?.isTemplate = true
         return image
