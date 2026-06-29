@@ -382,7 +382,7 @@ final class OffTickApp: NSObject, NSApplicationDelegate {
 
     private func renderSettings() {
         clearStack()
-        panel.setContentSize(NSSize(width: 340, height: 718))
+        panel.setContentSize(NSSize(width: 340, height: 746))
 
         let title = makeLabel(t("settings"), size: 18, weight: .semibold)
         stackView.addArrangedSubview(title)
@@ -432,7 +432,10 @@ final class OffTickApp: NSObject, NSApplicationDelegate {
         stackView.addArrangedSubview(makeSeparator())
         stackView.addArrangedSubview(makeSectionTitle(t("income")))
         let monthlyIncomeField = makeNumberField(value: settings.monthlyIncome, tag: SettingField.monthlyIncome.rawValue)
-        stackView.addArrangedSubview(makeRow(label: t("monthlyIncome"), control: monthlyIncomeField, suffix: t("yuan")))
+        stackView.addArrangedSubview(makeRow(label: t("monthlyIncome"), control: monthlyIncomeField, suffix: settings.currencyUnit.displayTitle))
+
+        let currencyPopUp = makeCurrencyPopUp()
+        stackView.addArrangedSubview(makeRow(label: t("currencyUnit"), control: currencyPopUp, suffix: nil))
 
         let workdaysField = makeNumberField(value: Double(settings.workdaysInMonth), tag: SettingField.workdaysInMonth.rawValue)
         stackView.addArrangedSubview(makeRow(label: t("workdaysInMonth"), control: workdaysField, suffix: t("days")))
@@ -659,12 +662,12 @@ final class OffTickApp: NSObject, NSApplicationDelegate {
         var hasAddedIncomeVisibilityButton = false
 
         if settings.showEarnedIncomeInPanel {
-            stackView.addArrangedSubview(makeMetric(caption: t("earnedIncome"), value: String(format: "¥%.2f", snapshot.earnedToday()), color: .labelColor, isPrivate: true, showsPrivacyToggle: true))
+            stackView.addArrangedSubview(makeMetric(caption: t("earnedIncome"), value: formatIncome(snapshot.earnedToday()), color: .labelColor, isPrivate: true, showsPrivacyToggle: true))
             hasAddedIncomeVisibilityButton = true
         }
 
         if settings.showDailyIncomeInPanel {
-            stackView.addArrangedSubview(makeMetric(caption: t("dailyIncome"), value: String(format: "¥%.2f", settings.dailyIncome), color: .labelColor, isPrivate: true, showsPrivacyToggle: !hasAddedIncomeVisibilityButton))
+            stackView.addArrangedSubview(makeMetric(caption: t("dailyIncome"), value: formatIncome(settings.dailyIncome), color: .labelColor, isPrivate: true, showsPrivacyToggle: !hasAddedIncomeVisibilityButton))
         }
     }
 
@@ -710,7 +713,7 @@ final class OffTickApp: NSObject, NSApplicationDelegate {
         let captionLabel = makeLabel(caption, size: metrics.captionFontSize, weight: .medium, color: .secondaryLabelColor)
         captionLabel.widthAnchor.constraint(equalToConstant: metrics.captionWidth).isActive = true
 
-        let displayValue = isPrivate && !settings.showIncomeDetailsInPanel ? "¥****" : value
+        let displayValue = isPrivate && !settings.showIncomeDetailsInPanel ? settings.currencyUnit.privatePlaceholder : value
         let valueLabel = makeLabel(displayValue, size: metrics.valueFontSize, weight: .semibold, color: color)
         valueLabel.font = .monospacedDigitSystemFont(ofSize: metrics.valueFontSize, weight: .semibold)
         valueLabel.setContentCompressionResistancePriority(.defaultLow, for: .horizontal)
@@ -809,6 +812,21 @@ final class OffTickApp: NSObject, NSApplicationDelegate {
         return popUp
     }
 
+    private func makeCurrencyPopUp() -> NSPopUpButton {
+        let popUp = NSPopUpButton()
+        popUp.controlSize = .small
+        popUp.target = self
+        popUp.action = #selector(currencyPopUpChanged(_:))
+        for currencyUnit in CurrencyUnit.allCases {
+            popUp.addItem(withTitle: currencyUnit.displayTitle)
+            popUp.lastItem?.representedObject = currencyUnit.rawValue
+        }
+        popUp.selectItem(withTitle: settings.currencyUnit.displayTitle)
+        popUp.translatesAutoresizingMaskIntoConstraints = false
+        popUp.widthAnchor.constraint(equalToConstant: 96).isActive = true
+        return popUp
+    }
+
     private func makeSeparator() -> NSBox {
         let separator = NSBox()
         separator.boxType = .separator
@@ -841,9 +859,9 @@ final class OffTickApp: NSObject, NSApplicationDelegate {
             menu.addItem(countdownItem)
             menu.addItem(NSMenuItem.separator())
 
-            let earnedItem = NSMenuItem(title: String(format: "\(t("earnedIncome"))：¥%.2f", snapshot.earnedToday()), action: nil, keyEquivalent: "")
+            let earnedItem = NSMenuItem(title: "\(t("earnedIncome"))：\(formatIncome(snapshot.earnedToday()))", action: nil, keyEquivalent: "")
             earnedItem.isEnabled = false
-            let dailyItem = NSMenuItem(title: String(format: "\(t("dailyIncome"))：¥%.2f", settings.dailyIncome), action: nil, keyEquivalent: "")
+            let dailyItem = NSMenuItem(title: "\(t("dailyIncome"))：\(formatIncome(settings.dailyIncome))", action: nil, keyEquivalent: "")
             dailyItem.isEnabled = false
             menu.addItem(earnedItem)
             menu.addItem(dailyItem)
@@ -910,8 +928,12 @@ final class OffTickApp: NSObject, NSApplicationDelegate {
         let snapshot = OffTickSnapshot(settings: settings, now: timeProvider.now)
         liveTimeMenuItem?.title = "\(t("currentTime"))：\(snapshot.timeText())"
         liveCountdownMenuItem?.title = "\(t("countdown"))：\(snapshot.countdownText())"
-        liveEarnedMenuItem?.title = String(format: "\(t("earnedIncome"))：¥%.2f", snapshot.earnedToday())
-        liveDailyMenuItem?.title = String(format: "\(t("dailyIncome"))：¥%.2f", settings.dailyIncome)
+        liveEarnedMenuItem?.title = "\(t("earnedIncome"))：\(formatIncome(snapshot.earnedToday()))"
+        liveDailyMenuItem?.title = "\(t("dailyIncome"))：\(formatIncome(settings.dailyIncome))"
+    }
+
+    private func formatIncome(_ amount: Double) -> String {
+        settings.currencyUnit.format(amount)
     }
 
     private func checkClockOutCelebration() {
@@ -1150,6 +1172,17 @@ final class OffTickApp: NSObject, NSApplicationDelegate {
         changeLanguage(to: language)
     }
 
+    @objc private func currencyPopUpChanged(_ sender: NSPopUpButton) {
+        guard let rawValue = sender.selectedItem?.representedObject as? String else {
+            return
+        }
+
+        settings.currencyUnit = CurrencyUnit(storageValue: rawValue)
+        settings.save()
+        renderSettings()
+        rebuildStatusMenu(snapshot: timeProvider.isSynced ? OffTickSnapshot(settings: settings, now: timeProvider.now) : nil)
+    }
+
     @objc private func languageMenuChanged(_ sender: NSMenuItem) {
         guard let language = AppLanguage(rawValue: sender.tag) else {
             return
@@ -1324,6 +1357,70 @@ enum CalendarMode {
         default:
             self = .gregorian
         }
+    }
+}
+
+enum CurrencyUnit: String, CaseIterable {
+    static let storageKey = "currencyUnit"
+
+    case cny
+    case usd
+    case eur
+    case gbp
+    case jpy
+    case krw
+    case hkd
+    case twd
+    case aud
+    case cad
+
+    var storageValue: String {
+        rawValue
+    }
+
+    var symbol: String {
+        switch self {
+        case .cny:
+            return "¥"
+        case .usd:
+            return "$"
+        case .eur:
+            return "€"
+        case .gbp:
+            return "£"
+        case .jpy:
+            return "¥"
+        case .krw:
+            return "₩"
+        case .hkd:
+            return "HK$"
+        case .twd:
+            return "NT$"
+        case .aud:
+            return "A$"
+        case .cad:
+            return "C$"
+        }
+    }
+
+    var code: String {
+        rawValue.uppercased()
+    }
+
+    var displayTitle: String {
+        "\(code) \(symbol)"
+    }
+
+    var privatePlaceholder: String {
+        "\(symbol)****"
+    }
+
+    func format(_ amount: Double) -> String {
+        String(format: "\(symbol)%.2f", amount)
+    }
+
+    init(storageValue: String) {
+        self = CurrencyUnit(rawValue: storageValue) ?? .cny
     }
 }
 
@@ -1653,6 +1750,7 @@ enum L10n {
             "updateCheckFailedHint": "暂时无法检查更新。你可以稍后再试，或从菜单里打开 GitHub 发布页面手动查看。",
             "income": "收入",
             "monthlyIncome": "月薪",
+            "currencyUnit": "货币单位",
             "workdaysInMonth": "本月工作日",
             "timer": "计时",
             "workMode": "计算方式",
@@ -1693,16 +1791,16 @@ enum L10n {
             "launchAtLoginApprovalRequiredHint": "请在“系统设置 > 通用 > 登录项”里允许 OffTick 后，开机自启动才会生效。"
         ],
         .traditionalChinese: [
-            "settings": "設定", "hidePanel": "隱藏懸浮窗", "showPanel": "顯示懸浮窗", "quit": "退出 OffTick", "display": "顯示", "language": "語言", "time": "時間", "date": "日期", "hour24": "24小時", "hour12": "12小時", "gregorian": "國曆", "lunar": "農曆", "panelSize": "懸浮窗大小", "panelSizeSmall": "小", "panelSizeMedium": "中", "panelSizeLarge": "大", "panelContent": "懸浮窗內容", "options": "選項", "watermarkFormat": "浮水印格式", "countdown": "下班倒數", "earnedIncome": "今日即時收入", "dailyIncome": "日均收入", "includePanelInScreenshots": "截圖時包含懸浮窗", "launchAtLogin": "開機自動啟動", "watermarkIncludeDate": "浮水印包含匯出時間", "watermarkIncludeDevice": "浮水印包含設備序號", "updates": "更新", "checkForUpdates": "檢查更新", "checkingForUpdates": "正在檢查更新...", "openReleasesPage": "開啟發布頁面", "updateAvailable": "發現新版本", "noUpdateAvailable": "已是最新版本", "noUpdateAvailableHint": "目前版本已經是最新版本。", "updateCheckFailed": "檢查更新失敗", "updateCheckFailedHint": "暫時無法檢查更新。你可以稍後再試，或從選單開啟 GitHub 發布頁面手動查看。", "income": "收入", "monthlyIncome": "月薪", "workdaysInMonth": "本月工作日", "timer": "計時", "workMode": "計算方式", "fixedClockOut": "固定下班", "unlockTimer": "解鎖計時", "startTime": "上班時間", "clockOutTime": "下班時間", "dailyHours": "每日時長", "done": "完成", "resetDefault": "恢復預設", "syncingTime": "正在校準網路時間...", "noPanelContent": "未選擇懸浮窗內容", "currentTime": "目前時間", "waitingIncome": "收入：等待網路時間", "waitingUnlock": "等待今日5點後首次解鎖", "clockOutNotificationTitle": "下班啦", "clockOutNotificationBody": "今天辛苦了，OffTick 已經幫你數到下班時間。", "yuan": "元", "days": "天", "hoursUnit": "小時", "unlockRecords": "解鎖記錄", "exportUnlockRecords": "匯出解鎖記錄", "exportUnlockRecordsHint": "請輸入匯出的日期範圍，格式為 yyyy-MM-dd。", "exportStartDate": "開始日期", "exportEndDate": "結束日期", "export": "匯出", "cancel": "取消", "invalidDateRange": "日期範圍無效", "dateRangeFormatHint": "請使用 yyyy-MM-dd 格式，並確保開始日期不晚於結束日期。", "noUnlockRecords": "沒有解鎖記錄", "noUnlockRecordsHint": "所選範圍內沒有記錄到 5 點後的首次解鎖時間。", "exportComplete": "匯出完成", "exportFailed": "匯出失敗", "networkTimeUnavailable": "網路時間不可用", "networkTimeUnavailableHint": "OffTick 暫時無法校準網路時間，請連網後再匯出。", "launchAtLoginFailed": "開機自動啟動設定失敗", "launchAtLoginApprovalRequired": "需要系統確認", "launchAtLoginApprovalRequiredHint": "請在「系統設定 > 一般 > 登入項目」允許 OffTick 後，開機自動啟動才會生效。"
+            "settings": "設定", "hidePanel": "隱藏懸浮窗", "showPanel": "顯示懸浮窗", "quit": "退出 OffTick", "display": "顯示", "language": "語言", "time": "時間", "date": "日期", "hour24": "24小時", "hour12": "12小時", "gregorian": "國曆", "lunar": "農曆", "panelSize": "懸浮窗大小", "panelSizeSmall": "小", "panelSizeMedium": "中", "panelSizeLarge": "大", "panelContent": "懸浮窗內容", "options": "選項", "watermarkFormat": "浮水印格式", "countdown": "下班倒數", "earnedIncome": "今日即時收入", "dailyIncome": "日均收入", "includePanelInScreenshots": "截圖時包含懸浮窗", "launchAtLogin": "開機自動啟動", "watermarkIncludeDate": "浮水印包含匯出時間", "watermarkIncludeDevice": "浮水印包含設備序號", "updates": "更新", "checkForUpdates": "檢查更新", "checkingForUpdates": "正在檢查更新...", "openReleasesPage": "開啟發布頁面", "updateAvailable": "發現新版本", "noUpdateAvailable": "已是最新版本", "noUpdateAvailableHint": "目前版本已經是最新版本。", "updateCheckFailed": "檢查更新失敗", "updateCheckFailedHint": "暫時無法檢查更新。你可以稍後再試，或從選單開啟 GitHub 發布頁面手動查看。", "income": "收入", "monthlyIncome": "月薪", "currencyUnit": "貨幣單位", "workdaysInMonth": "本月工作日", "timer": "計時", "workMode": "計算方式", "fixedClockOut": "固定下班", "unlockTimer": "解鎖計時", "startTime": "上班時間", "clockOutTime": "下班時間", "dailyHours": "每日時長", "done": "完成", "resetDefault": "恢復預設", "syncingTime": "正在校準網路時間...", "noPanelContent": "未選擇懸浮窗內容", "currentTime": "目前時間", "waitingIncome": "收入：等待網路時間", "waitingUnlock": "等待今日5點後首次解鎖", "clockOutNotificationTitle": "下班啦", "clockOutNotificationBody": "今天辛苦了，OffTick 已經幫你數到下班時間。", "yuan": "元", "days": "天", "hoursUnit": "小時", "unlockRecords": "解鎖記錄", "exportUnlockRecords": "匯出解鎖記錄", "exportUnlockRecordsHint": "請輸入匯出的日期範圍，格式為 yyyy-MM-dd。", "exportStartDate": "開始日期", "exportEndDate": "結束日期", "export": "匯出", "cancel": "取消", "invalidDateRange": "日期範圍無效", "dateRangeFormatHint": "請使用 yyyy-MM-dd 格式，並確保開始日期不晚於結束日期。", "noUnlockRecords": "沒有解鎖記錄", "noUnlockRecordsHint": "所選範圍內沒有記錄到 5 點後的首次解鎖時間。", "exportComplete": "匯出完成", "exportFailed": "匯出失敗", "networkTimeUnavailable": "網路時間不可用", "networkTimeUnavailableHint": "OffTick 暫時無法校準網路時間，請連網後再匯出。", "launchAtLoginFailed": "開機自動啟動設定失敗", "launchAtLoginApprovalRequired": "需要系統確認", "launchAtLoginApprovalRequiredHint": "請在「系統設定 > 一般 > 登入項目」允許 OffTick 後，開機自動啟動才會生效。"
         ],
         .english: [
-            "settings": "Settings", "hidePanel": "Hide Floating Window", "showPanel": "Show Floating Window", "quit": "Quit OffTick", "display": "Display", "language": "Language", "time": "Time", "date": "Date", "hour24": "24-hour", "hour12": "12-hour", "gregorian": "Gregorian", "lunar": "Lunar", "panelSize": "Window Size", "panelSizeSmall": "Small", "panelSizeMedium": "Medium", "panelSizeLarge": "Large", "panelContent": "Floating Window", "options": "Options", "watermarkFormat": "Watermark", "countdown": "Clock-out Countdown", "earnedIncome": "Live Earnings", "dailyIncome": "Daily Income", "includePanelInScreenshots": "Include floating window in screenshots", "launchAtLogin": "Launch at login", "watermarkIncludeDate": "Include export time", "watermarkIncludeDevice": "Include device ID", "updates": "Updates", "checkForUpdates": "Check for Updates", "checkingForUpdates": "Checking for updates...", "openReleasesPage": "Open Releases Page", "updateAvailable": "Update Available", "noUpdateAvailable": "You are up to date", "noUpdateAvailableHint": "You are already using the latest version.", "updateCheckFailed": "Update Check Failed", "updateCheckFailedHint": "Unable to check for updates right now. Try again later, or open the GitHub Releases page from the menu.", "income": "Income", "monthlyIncome": "Monthly Income", "workdaysInMonth": "Workdays", "timer": "Timer", "workMode": "Mode", "fixedClockOut": "Fixed Clock-out", "unlockTimer": "Unlock Timer", "startTime": "Start Time", "clockOutTime": "Clock-out Time", "dailyHours": "Daily Hours", "done": "Done", "resetDefault": "Reset Defaults", "syncingTime": "Syncing network time...", "noPanelContent": "No floating content selected", "currentTime": "Current Time", "waitingIncome": "Income: waiting for network time", "waitingUnlock": "Waiting for first unlock after 5 AM", "clockOutNotificationTitle": "Time to clock out", "clockOutNotificationBody": "Nice work today. OffTick has counted down to your clock-out time.", "yuan": "CNY", "days": "days", "hoursUnit": "hours", "unlockRecords": "Unlock Records", "exportUnlockRecords": "Export Unlock Records", "exportUnlockRecordsHint": "Enter the export date range in yyyy-MM-dd format.", "exportStartDate": "Start Date", "exportEndDate": "End Date", "export": "Export", "cancel": "Cancel", "invalidDateRange": "Invalid Date Range", "dateRangeFormatHint": "Use yyyy-MM-dd and make sure the start date is not after the end date.", "noUnlockRecords": "No Unlock Records", "noUnlockRecordsHint": "No first unlock after 5 AM was recorded in the selected range.", "exportComplete": "Export Complete", "exportFailed": "Export Failed", "networkTimeUnavailable": "Network Time Unavailable", "networkTimeUnavailableHint": "OffTick could not sync network time. Connect to the internet and try exporting again.", "launchAtLoginFailed": "Could not update launch at login", "launchAtLoginApprovalRequired": "Approval Required", "launchAtLoginApprovalRequiredHint": "Allow OffTick in System Settings > General > Login Items before launch at login takes effect."
+            "settings": "Settings", "hidePanel": "Hide Floating Window", "showPanel": "Show Floating Window", "quit": "Quit OffTick", "display": "Display", "language": "Language", "time": "Time", "date": "Date", "hour24": "24-hour", "hour12": "12-hour", "gregorian": "Gregorian", "lunar": "Lunar", "panelSize": "Window Size", "panelSizeSmall": "Small", "panelSizeMedium": "Medium", "panelSizeLarge": "Large", "panelContent": "Floating Window", "options": "Options", "watermarkFormat": "Watermark", "countdown": "Clock-out Countdown", "earnedIncome": "Live Earnings", "dailyIncome": "Daily Income", "includePanelInScreenshots": "Include floating window in screenshots", "launchAtLogin": "Launch at login", "watermarkIncludeDate": "Include export time", "watermarkIncludeDevice": "Include device ID", "updates": "Updates", "checkForUpdates": "Check for Updates", "checkingForUpdates": "Checking for updates...", "openReleasesPage": "Open Releases Page", "updateAvailable": "Update Available", "noUpdateAvailable": "You are up to date", "noUpdateAvailableHint": "You are already using the latest version.", "updateCheckFailed": "Update Check Failed", "updateCheckFailedHint": "Unable to check for updates right now. Try again later, or open the GitHub Releases page from the menu.", "income": "Income", "monthlyIncome": "Monthly Income", "currencyUnit": "Currency", "workdaysInMonth": "Workdays", "timer": "Timer", "workMode": "Mode", "fixedClockOut": "Fixed Clock-out", "unlockTimer": "Unlock Timer", "startTime": "Start Time", "clockOutTime": "Clock-out Time", "dailyHours": "Daily Hours", "done": "Done", "resetDefault": "Reset Defaults", "syncingTime": "Syncing network time...", "noPanelContent": "No floating content selected", "currentTime": "Current Time", "waitingIncome": "Income: waiting for network time", "waitingUnlock": "Waiting for first unlock after 5 AM", "clockOutNotificationTitle": "Time to clock out", "clockOutNotificationBody": "Nice work today. OffTick has counted down to your clock-out time.", "yuan": "CNY", "days": "days", "hoursUnit": "hours", "unlockRecords": "Unlock Records", "exportUnlockRecords": "Export Unlock Records", "exportUnlockRecordsHint": "Enter the export date range in yyyy-MM-dd format.", "exportStartDate": "Start Date", "exportEndDate": "End Date", "export": "Export", "cancel": "Cancel", "invalidDateRange": "Invalid Date Range", "dateRangeFormatHint": "Use yyyy-MM-dd and make sure the start date is not after the end date.", "noUnlockRecords": "No Unlock Records", "noUnlockRecordsHint": "No first unlock after 5 AM was recorded in the selected range.", "exportComplete": "Export Complete", "exportFailed": "Export Failed", "networkTimeUnavailable": "Network Time Unavailable", "networkTimeUnavailableHint": "OffTick could not sync network time. Connect to the internet and try exporting again.", "launchAtLoginFailed": "Could not update launch at login", "launchAtLoginApprovalRequired": "Approval Required", "launchAtLoginApprovalRequiredHint": "Allow OffTick in System Settings > General > Login Items before launch at login takes effect."
         ],
         .japanese: [
-            "settings": "設定", "hidePanel": "フローティングウィンドウを隠す", "showPanel": "フローティングウィンドウを表示", "quit": "OffTick を終了", "display": "表示", "language": "言語", "time": "時刻", "date": "日付", "hour24": "24時間", "hour12": "12時間", "gregorian": "西暦", "lunar": "旧暦", "panelSize": "ウィンドウサイズ", "panelSizeSmall": "小", "panelSizeMedium": "中", "panelSizeLarge": "大", "panelContent": "表示内容", "options": "オプション", "watermarkFormat": "透かし形式", "countdown": "退勤カウントダウン", "earnedIncome": "本日のリアルタイム収入", "dailyIncome": "日収", "includePanelInScreenshots": "スクリーンショットに含める", "launchAtLogin": "ログイン時に起動", "watermarkIncludeDate": "透かしに書き出し時刻を含める", "watermarkIncludeDevice": "透かしにデバイスIDを含める", "updates": "アップデート", "checkForUpdates": "アップデートを確認", "checkingForUpdates": "アップデートを確認中...", "openReleasesPage": "リリースページを開く", "updateAvailable": "新しいバージョンがあります", "noUpdateAvailable": "最新版です", "noUpdateAvailableHint": "現在のバージョンは最新です。", "updateCheckFailed": "アップデート確認に失敗", "updateCheckFailedHint": "現在アップデートを確認できません。後でもう一度試すか、メニューから GitHub リリースページを開いて確認してください。", "income": "収入", "monthlyIncome": "月収", "workdaysInMonth": "今月の出勤日", "timer": "タイマー", "workMode": "計算方式", "fixedClockOut": "固定退勤", "unlockTimer": "ロック解除計時", "startTime": "始業時刻", "clockOutTime": "退勤時刻", "dailyHours": "1日の勤務時間", "done": "完了", "resetDefault": "初期値に戻す", "syncingTime": "ネットワーク時刻を同期中...", "noPanelContent": "表示内容が選択されていません", "currentTime": "現在時刻", "waitingIncome": "収入：時刻同期待ち", "waitingUnlock": "今日5時以降の初回ロック解除待ち", "clockOutNotificationTitle": "退勤時間です", "clockOutNotificationBody": "今日もお疲れさまでした。OffTick が退勤時間を知らせます。", "yuan": "元", "days": "日", "hoursUnit": "時間", "unlockRecords": "ロック解除記録", "exportUnlockRecords": "ロック解除記録を書き出す", "exportUnlockRecordsHint": "書き出す日付範囲を yyyy-MM-dd 形式で入力してください。", "exportStartDate": "開始日", "exportEndDate": "終了日", "export": "書き出す", "cancel": "キャンセル", "invalidDateRange": "日付範囲が無効です", "dateRangeFormatHint": "yyyy-MM-dd 形式を使用し、開始日が終了日より後にならないようにしてください。", "noUnlockRecords": "ロック解除記録がありません", "noUnlockRecordsHint": "選択した範囲に、5時以降の初回ロック解除記録はありません。", "exportComplete": "書き出し完了", "exportFailed": "書き出し失敗", "networkTimeUnavailable": "ネットワーク時刻を利用できません", "networkTimeUnavailableHint": "OffTick はネットワーク時刻を同期できませんでした。インターネットに接続してから再度書き出してください。", "launchAtLoginFailed": "ログイン時起動の設定に失敗しました", "launchAtLoginApprovalRequired": "システムの承認が必要です", "launchAtLoginApprovalRequiredHint": "「システム設定 > 一般 > ログイン項目」で OffTick を許可すると有効になります。"
+            "settings": "設定", "hidePanel": "フローティングウィンドウを隠す", "showPanel": "フローティングウィンドウを表示", "quit": "OffTick を終了", "display": "表示", "language": "言語", "time": "時刻", "date": "日付", "hour24": "24時間", "hour12": "12時間", "gregorian": "西暦", "lunar": "旧暦", "panelSize": "ウィンドウサイズ", "panelSizeSmall": "小", "panelSizeMedium": "中", "panelSizeLarge": "大", "panelContent": "表示内容", "options": "オプション", "watermarkFormat": "透かし形式", "countdown": "退勤カウントダウン", "earnedIncome": "本日のリアルタイム収入", "dailyIncome": "日収", "includePanelInScreenshots": "スクリーンショットに含める", "launchAtLogin": "ログイン時に起動", "watermarkIncludeDate": "透かしに書き出し時刻を含める", "watermarkIncludeDevice": "透かしにデバイスIDを含める", "updates": "アップデート", "checkForUpdates": "アップデートを確認", "checkingForUpdates": "アップデートを確認中...", "openReleasesPage": "リリースページを開く", "updateAvailable": "新しいバージョンがあります", "noUpdateAvailable": "最新版です", "noUpdateAvailableHint": "現在のバージョンは最新です。", "updateCheckFailed": "アップデート確認に失敗", "updateCheckFailedHint": "現在アップデートを確認できません。後でもう一度試すか、メニューから GitHub リリースページを開いて確認してください。", "income": "収入", "monthlyIncome": "月収", "currencyUnit": "通貨単位", "workdaysInMonth": "今月の出勤日", "timer": "タイマー", "workMode": "計算方式", "fixedClockOut": "固定退勤", "unlockTimer": "ロック解除計時", "startTime": "始業時刻", "clockOutTime": "退勤時刻", "dailyHours": "1日の勤務時間", "done": "完了", "resetDefault": "初期値に戻す", "syncingTime": "ネットワーク時刻を同期中...", "noPanelContent": "表示内容が選択されていません", "currentTime": "現在時刻", "waitingIncome": "収入：時刻同期待ち", "waitingUnlock": "今日5時以降の初回ロック解除待ち", "clockOutNotificationTitle": "退勤時間です", "clockOutNotificationBody": "今日もお疲れさまでした。OffTick が退勤時間を知らせます。", "yuan": "元", "days": "日", "hoursUnit": "時間", "unlockRecords": "ロック解除記録", "exportUnlockRecords": "ロック解除記録を書き出す", "exportUnlockRecordsHint": "書き出す日付範囲を yyyy-MM-dd 形式で入力してください。", "exportStartDate": "開始日", "exportEndDate": "終了日", "export": "書き出す", "cancel": "キャンセル", "invalidDateRange": "日付範囲が無効です", "dateRangeFormatHint": "yyyy-MM-dd 形式を使用し、開始日が終了日より後にならないようにしてください。", "noUnlockRecords": "ロック解除記録がありません", "noUnlockRecordsHint": "選択した範囲に、5時以降の初回ロック解除記録はありません。", "exportComplete": "書き出し完了", "exportFailed": "書き出し失敗", "networkTimeUnavailable": "ネットワーク時刻を利用できません", "networkTimeUnavailableHint": "OffTick はネットワーク時刻を同期できませんでした。インターネットに接続してから再度書き出してください。", "launchAtLoginFailed": "ログイン時起動の設定に失敗しました", "launchAtLoginApprovalRequired": "システムの承認が必要です", "launchAtLoginApprovalRequiredHint": "「システム設定 > 一般 > ログイン項目」で OffTick を許可すると有効になります。"
         ],
         .korean: [
-            "settings": "설정", "hidePanel": "플로팅 창 숨기기", "showPanel": "플로팅 창 보기", "quit": "OffTick 종료", "display": "표시", "language": "언어", "time": "시간", "date": "날짜", "hour24": "24시간", "hour12": "12시간", "gregorian": "양력", "lunar": "음력", "panelSize": "창 크기", "panelSizeSmall": "작게", "panelSizeMedium": "중간", "panelSizeLarge": "크게", "panelContent": "플로팅 창 내용", "options": "옵션", "watermarkFormat": "워터마크", "countdown": "퇴근 카운트다운", "earnedIncome": "오늘 실시간 수입", "dailyIncome": "일평균 수입", "includePanelInScreenshots": "스크린샷에 플로팅 창 포함", "launchAtLogin": "로그인 시 실행", "watermarkIncludeDate": "워터마크에 내보낸 시간 포함", "watermarkIncludeDevice": "워터마크에 기기 ID 포함", "updates": "업데이트", "checkForUpdates": "업데이트 확인", "checkingForUpdates": "업데이트 확인 중...", "openReleasesPage": "릴리스 페이지 열기", "updateAvailable": "새 버전 있음", "noUpdateAvailable": "최신 버전입니다", "noUpdateAvailableHint": "현재 최신 버전을 사용 중입니다.", "updateCheckFailed": "업데이트 확인 실패", "updateCheckFailedHint": "지금은 업데이트를 확인할 수 없습니다. 나중에 다시 시도하거나 메뉴에서 GitHub 릴리스 페이지를 열어 확인하세요.", "income": "수입", "monthlyIncome": "월급", "workdaysInMonth": "이번 달 근무일", "timer": "타이머", "workMode": "계산 방식", "fixedClockOut": "고정 퇴근", "unlockTimer": "잠금 해제 기준", "startTime": "출근 시간", "clockOutTime": "퇴근 시간", "dailyHours": "하루 근무시간", "done": "완료", "resetDefault": "기본값 복원", "syncingTime": "네트워크 시간 동기화 중...", "noPanelContent": "선택된 표시 항목 없음", "currentTime": "현재 시간", "waitingIncome": "수입: 네트워크 시간 대기", "waitingUnlock": "오늘 5시 이후 첫 잠금 해제 대기", "clockOutNotificationTitle": "퇴근 시간입니다", "clockOutNotificationBody": "오늘도 수고했어요. OffTick 이 퇴근 시간을 알려드려요.", "yuan": "위안", "days": "일", "hoursUnit": "시간", "unlockRecords": "잠금 해제 기록", "exportUnlockRecords": "잠금 해제 기록 내보내기", "exportUnlockRecordsHint": "내보낼 날짜 범위를 yyyy-MM-dd 형식으로 입력하세요.", "exportStartDate": "시작일", "exportEndDate": "종료일", "export": "내보내기", "cancel": "취소", "invalidDateRange": "날짜 범위가 올바르지 않습니다", "dateRangeFormatHint": "yyyy-MM-dd 형식을 사용하고 시작일이 종료일보다 늦지 않도록 하세요.", "noUnlockRecords": "잠금 해제 기록 없음", "noUnlockRecordsHint": "선택한 범위에 5시 이후 첫 잠금 해제 기록이 없습니다.", "exportComplete": "내보내기 완료", "exportFailed": "내보내기 실패", "networkTimeUnavailable": "네트워크 시간을 사용할 수 없음", "networkTimeUnavailableHint": "OffTick 이 네트워크 시간을 동기화하지 못했습니다. 인터넷에 연결한 뒤 다시 내보내세요.", "launchAtLoginFailed": "로그인 시 실행 설정 실패", "launchAtLoginApprovalRequired": "시스템 승인이 필요합니다", "launchAtLoginApprovalRequiredHint": "시스템 설정 > 일반 > 로그인 항목에서 OffTick 을 허용하면 적용됩니다."
+            "settings": "설정", "hidePanel": "플로팅 창 숨기기", "showPanel": "플로팅 창 보기", "quit": "OffTick 종료", "display": "표시", "language": "언어", "time": "시간", "date": "날짜", "hour24": "24시간", "hour12": "12시간", "gregorian": "양력", "lunar": "음력", "panelSize": "창 크기", "panelSizeSmall": "작게", "panelSizeMedium": "중간", "panelSizeLarge": "크게", "panelContent": "플로팅 창 내용", "options": "옵션", "watermarkFormat": "워터마크", "countdown": "퇴근 카운트다운", "earnedIncome": "오늘 실시간 수입", "dailyIncome": "일평균 수입", "includePanelInScreenshots": "스크린샷에 플로팅 창 포함", "launchAtLogin": "로그인 시 실행", "watermarkIncludeDate": "워터마크에 내보낸 시간 포함", "watermarkIncludeDevice": "워터마크에 기기 ID 포함", "updates": "업데이트", "checkForUpdates": "업데이트 확인", "checkingForUpdates": "업데이트 확인 중...", "openReleasesPage": "릴리스 페이지 열기", "updateAvailable": "새 버전 있음", "noUpdateAvailable": "최신 버전입니다", "noUpdateAvailableHint": "현재 최신 버전을 사용 중입니다.", "updateCheckFailed": "업데이트 확인 실패", "updateCheckFailedHint": "지금은 업데이트를 확인할 수 없습니다. 나중에 다시 시도하거나 메뉴에서 GitHub 릴리스 페이지를 열어 확인하세요.", "income": "수입", "monthlyIncome": "월급", "currencyUnit": "통화 단위", "workdaysInMonth": "이번 달 근무일", "timer": "타이머", "workMode": "계산 방식", "fixedClockOut": "고정 퇴근", "unlockTimer": "잠금 해제 기준", "startTime": "출근 시간", "clockOutTime": "퇴근 시간", "dailyHours": "하루 근무시간", "done": "완료", "resetDefault": "기본값 복원", "syncingTime": "네트워크 시간 동기화 중...", "noPanelContent": "선택된 표시 항목 없음", "currentTime": "현재 시간", "waitingIncome": "수입: 네트워크 시간 대기", "waitingUnlock": "오늘 5시 이후 첫 잠금 해제 대기", "clockOutNotificationTitle": "퇴근 시간입니다", "clockOutNotificationBody": "오늘도 수고했어요. OffTick 이 퇴근 시간을 알려드려요.", "yuan": "위안", "days": "일", "hoursUnit": "시간", "unlockRecords": "잠금 해제 기록", "exportUnlockRecords": "잠금 해제 기록 내보내기", "exportUnlockRecordsHint": "내보낼 날짜 범위를 yyyy-MM-dd 형식으로 입력하세요.", "exportStartDate": "시작일", "exportEndDate": "종료일", "export": "내보내기", "cancel": "취소", "invalidDateRange": "날짜 범위가 올바르지 않습니다", "dateRangeFormatHint": "yyyy-MM-dd 형식을 사용하고 시작일이 종료일보다 늦지 않도록 하세요.", "noUnlockRecords": "잠금 해제 기록 없음", "noUnlockRecordsHint": "선택한 범위에 5시 이후 첫 잠금 해제 기록이 없습니다.", "exportComplete": "내보내기 완료", "exportFailed": "내보내기 실패", "networkTimeUnavailable": "네트워크 시간을 사용할 수 없음", "networkTimeUnavailableHint": "OffTick 이 네트워크 시간을 동기화하지 못했습니다. 인터넷에 연결한 뒤 다시 내보내세요.", "launchAtLoginFailed": "로그인 시 실행 설정 실패", "launchAtLoginApprovalRequired": "시스템 승인이 필요합니다", "launchAtLoginApprovalRequiredHint": "시스템 설정 > 일반 > 로그인 항목에서 OffTick 을 허용하면 적용됩니다."
         ],
         .spanish: [
             "settings": "Ajustes", "hidePanel": "Ocultar ventana flotante", "showPanel": "Mostrar ventana flotante", "quit": "Salir de OffTick", "display": "Visualización", "language": "Idioma", "time": "Hora", "date": "Fecha", "hour24": "24 h", "hour12": "12 h", "gregorian": "Gregoriano", "lunar": "Lunar", "panelSize": "Tamaño", "panelSizeSmall": "Pequeño", "panelSizeMedium": "Mediano", "panelSizeLarge": "Grande", "panelContent": "Contenido flotante", "options": "Opciones", "watermarkFormat": "Marca de agua", "countdown": "Cuenta atrás", "earnedIncome": "Ingresos en vivo", "dailyIncome": "Ingreso diario", "includePanelInScreenshots": "Incluir ventana flotante en capturas", "launchAtLogin": "Iniciar al acceder", "watermarkIncludeDate": "Incluir hora de exportación", "watermarkIncludeDevice": "Incluir ID del dispositivo", "updates": "Actualizaciones", "checkForUpdates": "Buscar actualizaciones", "checkingForUpdates": "Buscando actualizaciones...", "openReleasesPage": "Abrir página de lanzamientos", "updateAvailable": "Nueva versión disponible", "noUpdateAvailable": "Ya tienes la última versión", "noUpdateAvailableHint": "Ya estás usando la última versión.", "updateCheckFailed": "No se pudo buscar actualizaciones", "updateCheckFailedHint": "No se puede buscar actualizaciones ahora. Inténtalo más tarde o abre la página de lanzamientos de GitHub desde el menú.", "income": "Ingresos", "monthlyIncome": "Salario mensual", "workdaysInMonth": "Días laborables", "timer": "Temporizador", "workMode": "Modo", "fixedClockOut": "Salida fija", "unlockTimer": "Desde desbloqueo", "startTime": "Entrada", "clockOutTime": "Salida", "dailyHours": "Horas diarias", "done": "Listo", "resetDefault": "Restablecer", "syncingTime": "Sincronizando hora...", "noPanelContent": "Sin contenido seleccionado", "currentTime": "Hora actual", "waitingIncome": "Ingresos: esperando hora de red", "waitingUnlock": "Esperando el primer desbloqueo después de las 5", "clockOutNotificationTitle": "Hora de salir", "clockOutNotificationBody": "Buen trabajo hoy. OffTick llegó a tu hora de salida.", "yuan": "CNY", "days": "días", "hoursUnit": "horas", "unlockRecords": "Registros de desbloqueo", "exportUnlockRecords": "Exportar registros de desbloqueo", "exportUnlockRecordsHint": "Introduce el rango de fechas en formato yyyy-MM-dd.", "exportStartDate": "Fecha inicial", "exportEndDate": "Fecha final", "export": "Exportar", "cancel": "Cancelar", "invalidDateRange": "Rango de fechas no válido", "dateRangeFormatHint": "Usa yyyy-MM-dd y asegúrate de que la fecha inicial no sea posterior a la final.", "noUnlockRecords": "Sin registros de desbloqueo", "noUnlockRecordsHint": "No se registró ningún primer desbloqueo después de las 5 en el rango seleccionado.", "exportComplete": "Exportación completada", "exportFailed": "Error al exportar", "networkTimeUnavailable": "Hora de red no disponible", "networkTimeUnavailableHint": "OffTick no pudo sincronizar la hora de red. Conéctate a internet e intenta exportar de nuevo.", "launchAtLoginFailed": "No se pudo actualizar el inicio al acceder", "launchAtLoginApprovalRequired": "Se requiere aprobación", "launchAtLoginApprovalRequiredHint": "Permite OffTick en Ajustes del Sistema > General > Ítems de inicio para que surta efecto."
@@ -2082,6 +2180,7 @@ final class NetworkTimeProvider {
 
 struct WorkSettings {
     var monthlyIncome: Double
+    var currencyUnit: CurrencyUnit
     var workdaysInMonth: Int
     var dailyWorkHours: Double
     var fixedStartHour: Int
@@ -2110,6 +2209,7 @@ struct WorkSettings {
     static func defaultSettings(for date: Date) -> WorkSettings {
         WorkSettings(
             monthlyIncome: 10_000,
+            currencyUnit: .cny,
             workdaysInMonth: ChinaWorkCalendar.workdaysInMonth(containing: date),
             dailyWorkHours: 8,
             fixedStartHour: 9,
@@ -2151,6 +2251,7 @@ struct WorkSettings {
 
         return WorkSettings(
             monthlyIncome: defaults.object(forKey: "monthlyIncome").map { _ in defaults.double(forKey: "monthlyIncome") } ?? fallback.monthlyIncome,
+            currencyUnit: CurrencyUnit(storageValue: defaults.string(forKey: CurrencyUnit.storageKey) ?? fallback.currencyUnit.storageValue),
             workdaysInMonth: defaults.object(forKey: workdaysKey).map { _ in defaults.integer(forKey: workdaysKey) } ?? fallback.workdaysInMonth,
             dailyWorkHours: defaults.object(forKey: "dailyWorkHours").map { _ in defaults.double(forKey: "dailyWorkHours") } ?? fallback.dailyWorkHours,
             fixedStartHour: defaults.object(forKey: "fixedStartHour").map { _ in defaults.integer(forKey: "fixedStartHour") } ?? fallback.fixedStartHour,
@@ -2183,6 +2284,7 @@ struct WorkSettings {
 
         let explicitKeys = [
             "monthlyIncome",
+            CurrencyUnit.storageKey,
             "workdaysInMonth",
             "dailyWorkHours",
             "fixedStartHour",
@@ -2230,6 +2332,7 @@ struct WorkSettings {
         let defaults = UserDefaults.standard
         let sanitized = self.sanitized()
         defaults.set(sanitized.monthlyIncome, forKey: "monthlyIncome")
+        defaults.set(sanitized.currencyUnit.storageValue, forKey: CurrencyUnit.storageKey)
         defaults.set(sanitized.workdaysInMonth, forKey: "workdaysInMonth")
         defaults.set(sanitized.dailyWorkHours, forKey: "dailyWorkHours")
         defaults.set(sanitized.fixedStartHour, forKey: "fixedStartHour")
@@ -2255,6 +2358,7 @@ struct WorkSettings {
     private func sanitized() -> WorkSettings {
         WorkSettings(
             monthlyIncome: max(0, monthlyIncome),
+            currencyUnit: currencyUnit,
             workdaysInMonth: max(1, workdaysInMonth),
             dailyWorkHours: min(max(0.5, dailyWorkHours), 24),
             fixedStartHour: min(max(0, fixedStartHour), 23),
