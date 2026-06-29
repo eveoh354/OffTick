@@ -319,6 +319,10 @@ final class OffTickApp: NSObject, NSApplicationDelegate {
     }
 
     private func applyPanelContextMenu(_ menu: NSMenu, to view: NSView) {
+        if view is NSPopUpButton {
+            return
+        }
+
         view.menu = menu
         view.subviews.forEach { applyPanelContextMenu(menu, to: $0) }
     }
