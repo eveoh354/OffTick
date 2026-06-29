@@ -4,7 +4,7 @@ set -euo pipefail
 ROOT_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")/.." && pwd)"
 CONFIGURATION="${CONFIGURATION:-release}"
 BUNDLE_ID="${BUNDLE_ID:-online.eveoh.offtick}"
-MARKETING_VERSION="${MARKETING_VERSION:-0.1.0}"
+MARKETING_VERSION="${MARKETING_VERSION:-0.1.1}"
 BUILD_VERSION="${BUILD_VERSION:-1}"
 swift build -c "$CONFIGURATION" --package-path "$ROOT_DIR"
 BUILD_DIR="$(swift build -c "$CONFIGURATION" --show-bin-path)"
