@@ -201,8 +201,6 @@ final class OffTickApp: NSObject, NSApplicationDelegate {
 
         let container = makePanelBackgroundView()
         let contentContainer = panelContentContainer(for: container)
-        container.menu = makePanelContextMenu()
-        contentContainer.menu = container.menu
         contentContainer.addSubview(stackView)
         panel.contentView = container
 
@@ -217,6 +215,7 @@ final class OffTickApp: NSObject, NSApplicationDelegate {
             stackTopConstraint,
             stackBottomConstraint
         ].compactMap { $0 })
+        refreshPanelContextMenu()
     }
 
     private func makePanelBackgroundView() -> NSView {
@@ -311,12 +310,17 @@ final class OffTickApp: NSObject, NSApplicationDelegate {
         }
 
         let menu = makePanelContextMenu()
-        contentView.menu = menu
+        applyPanelContextMenu(menu, to: contentView)
         if #available(macOS 26.0, *),
            let glassView = contentView as? NSGlassEffectView,
            let glassContentView = glassView.contentView {
-            glassContentView.menu = menu
+            applyPanelContextMenu(menu, to: glassContentView)
         }
+    }
+
+    private func applyPanelContextMenu(_ menu: NSMenu, to view: NSView) {
+        view.menu = menu
+        view.subviews.forEach { applyPanelContextMenu(menu, to: $0) }
     }
 
     private func showPanelOnCurrentScreen() {
@@ -354,11 +358,13 @@ final class OffTickApp: NSObject, NSApplicationDelegate {
     private func updateContent() {
         if isShowingSettings {
             renderSettings()
+            refreshPanelContextMenu()
             return
         }
 
         guard timeProvider.isSynced else {
             renderSyncing()
+            refreshPanelContextMenu()
             configureStatusItemButton(toolTip: "OffTick \(t("syncingTime"))")
             rebuildStatusMenu(snapshot: nil)
             return
@@ -366,6 +372,7 @@ final class OffTickApp: NSObject, NSApplicationDelegate {
 
         let snapshot = OffTickSnapshot(settings: settings, now: timeProvider.now)
         renderOverview(snapshot: snapshot)
+        refreshPanelContextMenu()
         configureStatusItemButton(toolTip: "OffTick \(snapshot.statusTitle())")
         rebuildStatusMenu(snapshot: snapshot)
     }
