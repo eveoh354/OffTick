@@ -523,7 +523,9 @@ final class OffTickApp: NSObject, NSApplicationDelegate {
 
         do {
             try UnlockRecordsPDFExporter.write(records: records, from: startDate, to: endOfDay, settings: settings, to: url)
-            showMessage(title: t("exportComplete"), message: url.path)
+            showMessage(title: t("exportComplete"), message: url.path) {
+                NSWorkspace.shared.activateFileViewerSelecting([url])
+            }
         } catch {
             showMessage(title: t("exportFailed"), message: error.localizedDescription)
         }
@@ -541,12 +543,13 @@ final class OffTickApp: NSObject, NSApplicationDelegate {
         container.addSubview(field)
     }
 
-    private func showMessage(title: String, message: String) {
+    private func showMessage(title: String, message: String, completion: (() -> Void)? = nil) {
         let alert = NSAlert()
         alert.messageText = title
         alert.informativeText = message
         alert.addButton(withTitle: "OK")
         alert.runModal()
+        completion?()
     }
 
     private static let exportDateFormatter: DateFormatter = {
