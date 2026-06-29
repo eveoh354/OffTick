@@ -379,7 +379,7 @@ final class OffTickApp: NSObject, NSApplicationDelegate {
 
     private func renderSettings() {
         clearStack()
-        panel.setContentSize(NSSize(width: 340, height: 666))
+        panel.setContentSize(NSSize(width: 340, height: 718))
 
         let title = makeLabel(t("settings"), size: 18, weight: .semibold)
         stackView.addArrangedSubview(title)
@@ -420,6 +420,11 @@ final class OffTickApp: NSObject, NSApplicationDelegate {
         let launchAtLoginCheckbox = makeCheckbox(title: t("launchAtLogin"), isOn: LoginItemController.isEnabled, action: #selector(launchAtLoginChanged(_:)), tag: 0)
         launchAtLoginCheckbox.isEnabled = LoginItemController.isSupported
         stackView.addArrangedSubview(launchAtLoginCheckbox)
+
+        stackView.addArrangedSubview(makeSeparator())
+        stackView.addArrangedSubview(makeSectionTitle(t("watermarkFormat")))
+        stackView.addArrangedSubview(makeCheckbox(title: t("watermarkIncludeDate"), isOn: settings.includeDateInExportWatermark, action: #selector(watermarkFormatChanged(_:)), tag: WatermarkField.date.rawValue))
+        stackView.addArrangedSubview(makeCheckbox(title: t("watermarkIncludeDevice"), isOn: settings.includeDeviceInExportWatermark, action: #selector(watermarkFormatChanged(_:)), tag: WatermarkField.device.rawValue))
 
         stackView.addArrangedSubview(makeSeparator())
         stackView.addArrangedSubview(makeSectionTitle(t("income")))
@@ -962,6 +967,22 @@ final class OffTickApp: NSObject, NSApplicationDelegate {
         renderSettings()
     }
 
+    @objc private func watermarkFormatChanged(_ sender: NSButton) {
+        guard let field = WatermarkField(rawValue: sender.tag) else {
+            return
+        }
+
+        let isOn = sender.state == .on
+        switch field {
+        case .date:
+            settings.includeDateInExportWatermark = isOn
+        case .device:
+            settings.includeDeviceInExportWatermark = isOn
+        }
+
+        settings.save()
+    }
+
     @objc private func calendarModeChanged(_ sender: NSSegmentedControl) {
         settings.calendarMode = sender.selectedSegment == 0 ? .gregorian : .lunar
         settings.save()
@@ -1463,11 +1484,14 @@ enum L10n {
             "panelSizeLarge": "大",
             "panelContent": "悬浮窗内容",
             "options": "选项",
+            "watermarkFormat": "水印格式",
             "countdown": "下班倒计时",
             "earnedIncome": "今日实时收入",
             "dailyIncome": "日均收入",
             "includePanelInScreenshots": "截图时包含悬浮窗",
             "launchAtLogin": "开机自启动",
+            "watermarkIncludeDate": "水印包含导出时间",
+            "watermarkIncludeDevice": "水印包含设备号",
             "income": "收入",
             "monthlyIncome": "月薪",
             "workdaysInMonth": "本月工作日",
@@ -1513,7 +1537,7 @@ enum L10n {
             "settings": "設定", "hidePanel": "隱藏懸浮窗", "showPanel": "顯示懸浮窗", "quit": "退出 OffTick", "display": "顯示", "language": "語言", "time": "時間", "date": "日期", "hour24": "24小時", "hour12": "12小時", "gregorian": "國曆", "lunar": "農曆", "panelSize": "懸浮窗大小", "panelSizeSmall": "小", "panelSizeMedium": "中", "panelSizeLarge": "大", "panelContent": "懸浮窗內容", "countdown": "下班倒數", "earnedIncome": "今日即時收入", "dailyIncome": "日均收入", "income": "收入", "monthlyIncome": "月薪", "workdaysInMonth": "本月工作日", "timer": "計時", "workMode": "計算方式", "fixedClockOut": "固定下班", "unlockTimer": "解鎖計時", "startTime": "上班時間", "clockOutTime": "下班時間", "dailyHours": "每日時長", "done": "完成", "resetDefault": "恢復預設", "syncingTime": "正在校準網路時間...", "noPanelContent": "未選擇懸浮窗內容", "currentTime": "目前時間", "waitingIncome": "收入：等待網路時間", "waitingUnlock": "等待今日5點後首次解鎖", "clockOutNotificationTitle": "下班啦", "clockOutNotificationBody": "今天辛苦了，OffTick 已經幫你數到下班時間。", "yuan": "元", "days": "天", "hoursUnit": "小時"
         ],
         .english: [
-            "settings": "Settings", "hidePanel": "Hide Floating Window", "showPanel": "Show Floating Window", "quit": "Quit OffTick", "display": "Display", "language": "Language", "time": "Time", "date": "Date", "hour24": "24-hour", "hour12": "12-hour", "gregorian": "Gregorian", "lunar": "Lunar", "panelSize": "Window Size", "panelSizeSmall": "Small", "panelSizeMedium": "Medium", "panelSizeLarge": "Large", "panelContent": "Floating Window", "options": "Options", "countdown": "Clock-out Countdown", "earnedIncome": "Live Earnings", "dailyIncome": "Daily Income", "includePanelInScreenshots": "Include floating window in screenshots", "launchAtLogin": "Launch at login", "income": "Income", "monthlyIncome": "Monthly Income", "workdaysInMonth": "Workdays", "timer": "Timer", "workMode": "Mode", "fixedClockOut": "Fixed Clock-out", "unlockTimer": "Unlock Timer", "startTime": "Start Time", "clockOutTime": "Clock-out Time", "dailyHours": "Daily Hours", "done": "Done", "resetDefault": "Reset Defaults", "syncingTime": "Syncing network time...", "noPanelContent": "No floating content selected", "currentTime": "Current Time", "waitingIncome": "Income: waiting for network time", "waitingUnlock": "Waiting for first unlock after 5 AM", "clockOutNotificationTitle": "Time to clock out", "clockOutNotificationBody": "Nice work today. OffTick has counted down to your clock-out time.", "yuan": "CNY", "days": "days", "hoursUnit": "hours", "unlockRecords": "Unlock Records", "exportUnlockRecords": "Export Unlock Records", "exportUnlockRecordsHint": "Enter the export date range in yyyy-MM-dd format.", "exportStartDate": "Start Date", "exportEndDate": "End Date", "export": "Export", "cancel": "Cancel", "invalidDateRange": "Invalid Date Range", "dateRangeFormatHint": "Use yyyy-MM-dd and make sure the start date is not after the end date.", "noUnlockRecords": "No Unlock Records", "noUnlockRecordsHint": "No first unlock after 5 AM was recorded in the selected range.", "exportComplete": "Export Complete", "exportFailed": "Export Failed", "networkTimeUnavailable": "Network Time Unavailable", "networkTimeUnavailableHint": "OffTick could not sync network time. Connect to the internet and try exporting again.", "launchAtLoginFailed": "Could not update launch at login", "launchAtLoginApprovalRequired": "Approval Required", "launchAtLoginApprovalRequiredHint": "Allow OffTick in System Settings > General > Login Items before launch at login takes effect."
+            "settings": "Settings", "hidePanel": "Hide Floating Window", "showPanel": "Show Floating Window", "quit": "Quit OffTick", "display": "Display", "language": "Language", "time": "Time", "date": "Date", "hour24": "24-hour", "hour12": "12-hour", "gregorian": "Gregorian", "lunar": "Lunar", "panelSize": "Window Size", "panelSizeSmall": "Small", "panelSizeMedium": "Medium", "panelSizeLarge": "Large", "panelContent": "Floating Window", "options": "Options", "watermarkFormat": "Watermark", "countdown": "Clock-out Countdown", "earnedIncome": "Live Earnings", "dailyIncome": "Daily Income", "includePanelInScreenshots": "Include floating window in screenshots", "launchAtLogin": "Launch at login", "watermarkIncludeDate": "Include export time", "watermarkIncludeDevice": "Include device ID", "income": "Income", "monthlyIncome": "Monthly Income", "workdaysInMonth": "Workdays", "timer": "Timer", "workMode": "Mode", "fixedClockOut": "Fixed Clock-out", "unlockTimer": "Unlock Timer", "startTime": "Start Time", "clockOutTime": "Clock-out Time", "dailyHours": "Daily Hours", "done": "Done", "resetDefault": "Reset Defaults", "syncingTime": "Syncing network time...", "noPanelContent": "No floating content selected", "currentTime": "Current Time", "waitingIncome": "Income: waiting for network time", "waitingUnlock": "Waiting for first unlock after 5 AM", "clockOutNotificationTitle": "Time to clock out", "clockOutNotificationBody": "Nice work today. OffTick has counted down to your clock-out time.", "yuan": "CNY", "days": "days", "hoursUnit": "hours", "unlockRecords": "Unlock Records", "exportUnlockRecords": "Export Unlock Records", "exportUnlockRecordsHint": "Enter the export date range in yyyy-MM-dd format.", "exportStartDate": "Start Date", "exportEndDate": "End Date", "export": "Export", "cancel": "Cancel", "invalidDateRange": "Invalid Date Range", "dateRangeFormatHint": "Use yyyy-MM-dd and make sure the start date is not after the end date.", "noUnlockRecords": "No Unlock Records", "noUnlockRecordsHint": "No first unlock after 5 AM was recorded in the selected range.", "exportComplete": "Export Complete", "exportFailed": "Export Failed", "networkTimeUnavailable": "Network Time Unavailable", "networkTimeUnavailableHint": "OffTick could not sync network time. Connect to the internet and try exporting again.", "launchAtLoginFailed": "Could not update launch at login", "launchAtLoginApprovalRequired": "Approval Required", "launchAtLoginApprovalRequiredHint": "Allow OffTick in System Settings > General > Login Items before launch at login takes effect."
         ],
         .japanese: [
             "settings": "設定", "hidePanel": "フローティングウィンドウを隠す", "showPanel": "フローティングウィンドウを表示", "quit": "OffTick を終了", "display": "表示", "language": "言語", "time": "時刻", "date": "日付", "hour24": "24時間", "hour12": "12時間", "gregorian": "西暦", "lunar": "旧暦", "panelSize": "ウィンドウサイズ", "panelSizeSmall": "小", "panelSizeMedium": "中", "panelSizeLarge": "大", "panelContent": "表示内容", "countdown": "退勤カウントダウン", "earnedIncome": "本日のリアルタイム収入", "dailyIncome": "日収", "income": "収入", "monthlyIncome": "月収", "workdaysInMonth": "今月の出勤日", "timer": "タイマー", "workMode": "計算方式", "fixedClockOut": "固定退勤", "unlockTimer": "ロック解除計時", "startTime": "始業時刻", "clockOutTime": "退勤時刻", "dailyHours": "1日の勤務時間", "done": "完了", "resetDefault": "初期値に戻す", "syncingTime": "ネットワーク時刻を同期中...", "noPanelContent": "表示内容が選択されていません", "currentTime": "現在時刻", "waitingIncome": "収入：時刻同期待ち", "waitingUnlock": "今日5時以降の初回ロック解除待ち", "clockOutNotificationTitle": "退勤時間です", "clockOutNotificationBody": "今日もお疲れさまでした。OffTick が退勤時間を知らせます。", "yuan": "元", "days": "日", "hoursUnit": "時間"
@@ -1545,6 +1569,11 @@ private enum PanelContentField: Int {
     case countdown
     case earnedIncome
     case dailyIncome
+}
+
+private enum WatermarkField: Int {
+    case date = 1
+    case device
 }
 
 final class NotificationCoordinator {
@@ -1812,6 +1841,8 @@ struct WorkSettings {
     var showEarnedIncomeInPanel: Bool
     var showDailyIncomeInPanel: Bool
     var includePanelInScreenshots: Bool
+    var includeDateInExportWatermark: Bool
+    var includeDeviceInExportWatermark: Bool
 
     static var `default`: WorkSettings {
         defaultSettings(for: Date())
@@ -1836,7 +1867,9 @@ struct WorkSettings {
             showCountdownInPanel: true,
             showEarnedIncomeInPanel: false,
             showDailyIncomeInPanel: false,
-            includePanelInScreenshots: false
+            includePanelInScreenshots: false,
+            includeDateInExportWatermark: true,
+            includeDeviceInExportWatermark: true
         )
     }
 
@@ -1874,7 +1907,9 @@ struct WorkSettings {
             showCountdownInPanel: defaults.object(forKey: "showCountdownInPanel").map { _ in defaults.bool(forKey: "showCountdownInPanel") } ?? fallback.showCountdownInPanel,
             showEarnedIncomeInPanel: defaults.object(forKey: "showEarnedIncomeInPanel").map { _ in defaults.bool(forKey: "showEarnedIncomeInPanel") } ?? fallback.showEarnedIncomeInPanel,
             showDailyIncomeInPanel: defaults.object(forKey: "showDailyIncomeInPanel").map { _ in defaults.bool(forKey: "showDailyIncomeInPanel") } ?? fallback.showDailyIncomeInPanel,
-            includePanelInScreenshots: defaults.object(forKey: "includePanelInScreenshots").map { _ in defaults.bool(forKey: "includePanelInScreenshots") } ?? fallback.includePanelInScreenshots
+            includePanelInScreenshots: defaults.object(forKey: "includePanelInScreenshots").map { _ in defaults.bool(forKey: "includePanelInScreenshots") } ?? fallback.includePanelInScreenshots,
+            includeDateInExportWatermark: defaults.object(forKey: "includeDateInExportWatermark").map { _ in defaults.bool(forKey: "includeDateInExportWatermark") } ?? fallback.includeDateInExportWatermark,
+            includeDeviceInExportWatermark: defaults.object(forKey: "includeDeviceInExportWatermark").map { _ in defaults.bool(forKey: "includeDeviceInExportWatermark") } ?? fallback.includeDeviceInExportWatermark
         ).sanitized()
     }
 
@@ -1904,6 +1939,8 @@ struct WorkSettings {
             "showEarnedIncomeInPanel",
             "showDailyIncomeInPanel",
             "includePanelInScreenshots",
+            "includeDateInExportWatermark",
+            "includeDeviceInExportWatermark",
             "didMigrateChinaWorkdaysDefault"
         ]
 
@@ -1948,6 +1985,8 @@ struct WorkSettings {
         defaults.set(sanitized.showEarnedIncomeInPanel, forKey: "showEarnedIncomeInPanel")
         defaults.set(sanitized.showDailyIncomeInPanel, forKey: "showDailyIncomeInPanel")
         defaults.set(sanitized.includePanelInScreenshots, forKey: "includePanelInScreenshots")
+        defaults.set(sanitized.includeDateInExportWatermark, forKey: "includeDateInExportWatermark")
+        defaults.set(sanitized.includeDeviceInExportWatermark, forKey: "includeDeviceInExportWatermark")
     }
 
     private func sanitized() -> WorkSettings {
@@ -1969,7 +2008,9 @@ struct WorkSettings {
             showCountdownInPanel: showCountdownInPanel,
             showEarnedIncomeInPanel: showEarnedIncomeInPanel,
             showDailyIncomeInPanel: showDailyIncomeInPanel,
-            includePanelInScreenshots: includePanelInScreenshots
+            includePanelInScreenshots: includePanelInScreenshots,
+            includeDateInExportWatermark: includeDateInExportWatermark,
+            includeDeviceInExportWatermark: includeDeviceInExportWatermark
         )
     }
 
@@ -2324,7 +2365,7 @@ enum UnlockRecordsPDFExporter {
 
         let rowsPerPage = 28
         let pageCount = max(1, Int(ceil(Double(records.count) / Double(rowsPerPage))))
-        let deviceSerialNumber = DeviceIdentifier.serialNumber() ?? "unknown"
+        let deviceSerialNumber = settings.includeDeviceInExportWatermark ? DeviceIdentifier.serialNumber() ?? "unknown" : nil
         for pageIndex in 0..<pageCount {
             var mediaBox = pageRect
             context.beginPDFPage([kCGPDFContextMediaBox as String: NSData(bytes: &mediaBox, length: MemoryLayout<CGRect>.size)] as CFDictionary)
@@ -2359,7 +2400,7 @@ enum UnlockRecordsPDFExporter {
         to endDate: Date,
         settings: WorkSettings,
         generatedAt: Date,
-        deviceSerialNumber: String
+        deviceSerialNumber: String?
     ) {
         NSGraphicsContext.saveGraphicsState()
         context.saveGState()
@@ -2395,6 +2436,7 @@ enum UnlockRecordsPDFExporter {
         let contentBottom = CGFloat(178 + (max(1, pageRecords.count) * 22))
         drawWatermarks(
             in: CGRect(x: margin, y: 168, width: rect.width - (margin * 2), height: min(contentBottom + 10, rect.height - 96) - 168),
+            settings: settings,
             generatedAt: generatedAt,
             deviceSerialNumber: deviceSerialNumber
         )
@@ -2423,15 +2465,17 @@ enum UnlockRecordsPDFExporter {
         drawLine(from: CGPoint(x: margin, y: rect.height - 58), to: CGPoint(x: rect.width - margin, y: rect.height - 58))
         ("OffTick local export - page \(pageIndex + 1)/\(pageCount)" as NSString)
             .draw(at: NSPoint(x: margin, y: rect.height - 44), withAttributes: subtitleAttributes)
-        ("本 PDF 包含设备序列号，请勿泄漏或转发给不可信对象。" as NSString)
-            .draw(at: NSPoint(x: margin, y: rect.height - 28), withAttributes: subtitleAttributes)
+        if settings.includeDeviceInExportWatermark {
+            ("本 PDF 水印包含设备序列号，请勿泄漏或转发给不可信对象。" as NSString)
+                .draw(at: NSPoint(x: margin, y: rect.height - 28), withAttributes: subtitleAttributes)
+        }
 
         context.restoreGState()
         NSGraphicsContext.current = nil
         NSGraphicsContext.restoreGraphicsState()
     }
 
-    private static func drawWatermarks(in rect: CGRect, generatedAt: Date, deviceSerialNumber: String) {
+    private static func drawWatermarks(in rect: CGRect, settings: WorkSettings, generatedAt: Date, deviceSerialNumber: String?) {
         let titleAttributes: [NSAttributedString.Key: Any] = [
             .font: NSFont.boldSystemFont(ofSize: 14),
             .foregroundColor: NSColor.black.withAlphaComponent(0.026)
@@ -2440,12 +2484,19 @@ enum UnlockRecordsPDFExporter {
             .font: NSFont.monospacedDigitSystemFont(ofSize: 10.9, weight: .semibold),
             .foregroundColor: NSColor.black.withAlphaComponent(0.026)
         ]
-        let lines = ["OffTick", deviceSerialNumber, dateTimeString(generatedAt)]
+        var lines = ["OffTick"]
+        if let deviceSerialNumber {
+            lines.append(deviceSerialNumber)
+        }
+        if settings.includeDateInExportWatermark {
+            lines.append(dateTimeString(generatedAt))
+        }
+
         let maxWidth = lines.map { line in
             (line as NSString).size(withAttributes: line == "OffTick" ? titleAttributes : detailAttributes).width
         }.max() ?? 0
         let lineHeight: CGFloat = 16
-        let blockHeight: CGFloat = 46
+        let blockHeight = max(lineHeight, CGFloat(lines.count) * lineHeight)
         let xStep: CGFloat = 170
         let yStep: CGFloat = 60
 
@@ -2458,9 +2509,10 @@ enum UnlockRecordsPDFExporter {
                 transform.translateX(by: x, yBy: y)
                 transform.rotate(byDegrees: -20)
                 transform.concat()
-                ("OffTick" as NSString).draw(at: NSPoint(x: -maxWidth / 2, y: -blockHeight / 2), withAttributes: titleAttributes)
-                (deviceSerialNumber as NSString).draw(at: NSPoint(x: -maxWidth / 2, y: -blockHeight / 2 + lineHeight), withAttributes: detailAttributes)
-                (dateTimeString(generatedAt) as NSString).draw(at: NSPoint(x: -maxWidth / 2, y: -blockHeight / 2 + lineHeight * 2), withAttributes: detailAttributes)
+                for (index, line) in lines.enumerated() {
+                    let attributes = line == "OffTick" ? titleAttributes : detailAttributes
+                    (line as NSString).draw(at: NSPoint(x: -maxWidth / 2, y: -blockHeight / 2 + CGFloat(index) * lineHeight), withAttributes: attributes)
+                }
                 NSGraphicsContext.restoreGraphicsState()
                 x += xStep
             }
