@@ -2523,6 +2523,65 @@ struct UnlockRecord {
     let unlockDate: Date
 }
 
+struct PDFExportText {
+    let title: String
+    let range: String
+    let generated: String
+    let bundle: String
+    let mode: String
+    let dailyHours: String
+    let date: String
+    let firstUnlockTime: String
+    let recordedAt: String
+    let footer: String
+    let page: String
+    let deviceWarning: String
+
+    init(language: AppLanguage) {
+        switch language {
+        case .simplifiedChinese:
+            title = "OffTick 解锁记录"
+            range = "范围"
+            generated = "生成时间"
+            bundle = "Bundle"
+            mode = "模式"
+            dailyHours = "每日时长"
+            date = "日期"
+            firstUnlockTime = "首次解锁时间"
+            recordedAt = "记录时间"
+            footer = "OffTick 本地导出"
+            page = "页"
+            deviceWarning = "本 PDF 水印包含设备序列号，请勿泄漏或转发给不可信对象。"
+        case .traditionalChinese:
+            title = "OffTick 解鎖記錄"
+            range = "範圍"
+            generated = "產生時間"
+            bundle = "Bundle"
+            mode = "模式"
+            dailyHours = "每日時長"
+            date = "日期"
+            firstUnlockTime = "首次解鎖時間"
+            recordedAt = "記錄時間"
+            footer = "OffTick 本地匯出"
+            page = "頁"
+            deviceWarning = "本 PDF 浮水印包含設備序號，請勿洩漏或轉發給不可信對象。"
+        default:
+            title = "OffTick Unlock Records"
+            range = "Range"
+            generated = "Generated"
+            bundle = "Bundle"
+            mode = "Mode"
+            dailyHours = "Daily Hours"
+            date = "Date"
+            firstUnlockTime = "First Unlock Time"
+            recordedAt = "Recorded At"
+            footer = "OffTick local export"
+            page = "page"
+            deviceWarning = "This PDF watermark includes the device serial number. Do not share it with untrusted recipients."
+        }
+    }
+}
+
 enum DeviceIdentifier {
     static func serialNumber() -> String? {
         let platformExpert = IOServiceGetMatchingService(kIOMainPortDefault, IOServiceMatching("IOPlatformExpertDevice"))
@@ -2623,6 +2682,7 @@ enum UnlockRecordsPDFExporter {
         let endIndex = min(records.count, startIndex + rowsPerPage)
         let pageRecords = records[startIndex..<endIndex]
         let contentBottom = CGFloat(178 + (max(1, pageRecords.count) * 22))
+        let text = PDFExportText(language: settings.language)
         drawWatermarks(
             in: CGRect(x: margin, y: 168, width: rect.width - (margin * 2), height: min(contentBottom + 10, rect.height - 96) - 168),
             settings: settings,
@@ -2631,16 +2691,16 @@ enum UnlockRecordsPDFExporter {
         )
 
         let rangeText = "\(dateString(startDate)) - \(dateString(endDate))"
-        ("OffTick Unlock Records" as NSString).draw(at: NSPoint(x: margin, y: 46), withAttributes: titleAttributes)
-        ("Range: \(rangeText)    Generated: \(dateTimeString(generatedAt))    Bundle: \(Bundle.main.bundleIdentifier ?? "unknown")" as NSString)
+        (text.title as NSString).draw(at: NSPoint(x: margin, y: 46), withAttributes: titleAttributes)
+        ("\(text.range): \(rangeText)    \(text.generated): \(dateTimeString(generatedAt))    \(text.bundle): \(Bundle.main.bundleIdentifier ?? "unknown")" as NSString)
             .draw(at: NSPoint(x: margin, y: 76), withAttributes: subtitleAttributes)
-        ("Mode: \(settings.mode.storageValue)    Daily Hours: \(String(format: "%.1f", settings.dailyWorkHours))" as NSString)
+        ("\(text.mode): \(settings.mode.storageValue)    \(text.dailyHours): \(String(format: "%.1f", settings.dailyWorkHours))" as NSString)
             .draw(at: NSPoint(x: margin, y: 94), withAttributes: subtitleAttributes)
 
         drawLine(from: CGPoint(x: margin, y: 122), to: CGPoint(x: rect.width - margin, y: 122))
-        ("Date" as NSString).draw(at: NSPoint(x: margin, y: 138), withAttributes: headerAttributes)
-        ("First Unlock Time" as NSString).draw(at: NSPoint(x: margin + 180, y: 138), withAttributes: headerAttributes)
-        ("Recorded At" as NSString).draw(at: NSPoint(x: margin + 330, y: 138), withAttributes: headerAttributes)
+        (text.date as NSString).draw(at: NSPoint(x: margin, y: 138), withAttributes: headerAttributes)
+        (text.firstUnlockTime as NSString).draw(at: NSPoint(x: margin + 180, y: 138), withAttributes: headerAttributes)
+        (text.recordedAt as NSString).draw(at: NSPoint(x: margin + 330, y: 138), withAttributes: headerAttributes)
         drawLine(from: CGPoint(x: margin, y: 160), to: CGPoint(x: rect.width - margin, y: 160))
 
         var y: CGFloat = 178
@@ -2652,10 +2712,10 @@ enum UnlockRecordsPDFExporter {
         }
 
         drawLine(from: CGPoint(x: margin, y: rect.height - 58), to: CGPoint(x: rect.width - margin, y: rect.height - 58))
-        ("OffTick local export - page \(pageIndex + 1)/\(pageCount)" as NSString)
+        ("\(text.footer) - \(text.page) \(pageIndex + 1)/\(pageCount)" as NSString)
             .draw(at: NSPoint(x: margin, y: rect.height - 44), withAttributes: subtitleAttributes)
         if settings.includeDeviceInExportWatermark {
-            ("本 PDF 水印包含设备序列号，请勿泄漏或转发给不可信对象。" as NSString)
+            (text.deviceWarning as NSString)
                 .draw(at: NSPoint(x: margin, y: rect.height - 28), withAttributes: subtitleAttributes)
         }
 
@@ -2667,11 +2727,11 @@ enum UnlockRecordsPDFExporter {
     private static func drawWatermarks(in rect: CGRect, settings: WorkSettings, generatedAt: Date, deviceSerialNumber: String?) {
         let titleAttributes: [NSAttributedString.Key: Any] = [
             .font: NSFont.boldSystemFont(ofSize: 14),
-            .foregroundColor: NSColor.black.withAlphaComponent(0.026)
+            .foregroundColor: NSColor.black.withAlphaComponent(0.055)
         ]
         let detailAttributes: [NSAttributedString.Key: Any] = [
             .font: NSFont.monospacedDigitSystemFont(ofSize: 10.9, weight: .semibold),
-            .foregroundColor: NSColor.black.withAlphaComponent(0.026)
+            .foregroundColor: NSColor.black.withAlphaComponent(0.055)
         ]
         var lines = ["OffTick"]
         if let deviceSerialNumber {
@@ -2686,8 +2746,8 @@ enum UnlockRecordsPDFExporter {
         }.max() ?? 0
         let lineHeight: CGFloat = 16
         let blockHeight = max(lineHeight, CGFloat(lines.count) * lineHeight)
-        let xStep: CGFloat = 170
-        let yStep: CGFloat = 60
+        let xStep = min(max(maxWidth + 58, 92), 170)
+        let yStep = min(max(blockHeight + 18, 38), 60)
 
         var y = rect.minY + 18
         while y < rect.maxY {
