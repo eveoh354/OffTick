@@ -23,6 +23,8 @@ final class OffTickApp: NSObject, NSApplicationDelegate {
     private var stackBottomConstraint: NSLayoutConstraint?
     private var instanceLockFileDescriptor: Int32 = -1
     private let notificationCoordinator = NotificationCoordinator()
+    private var availableUpdate: GitHubRelease?
+    private var isCheckingForUpdate = false
     private var previousClockOutState: Bool?
     private var panelContentInsets: NSEdgeInsets {
         settings.panelSize.contentInsets
@@ -51,6 +53,7 @@ final class OffTickApp: NSObject, NSApplicationDelegate {
         }
         setupUnlockObservers()
         updateContent()
+        checkForUpdatesIfNeeded()
 
         DispatchQueue.main.asyncAfter(deadline: .now() + 0.8) { [weak self] in
             self?.showPanelOnCurrentScreen()
@@ -773,6 +776,7 @@ final class OffTickApp: NSObject, NSApplicationDelegate {
         menu.addItem(NSMenuItem(title: panel?.isVisible == true ? t("hidePanel") : t("showPanel"), action: #selector(togglePanelFromMenu), keyEquivalent: ""))
         menu.addItem(NSMenuItem(title: t("settings"), action: #selector(showSettingsFromMenu), keyEquivalent: ","))
         menu.addItem(makeLanguageMenuItem())
+        menu.addItem(makeUpdateMenuItem())
         menu.addItem(NSMenuItem.separator())
 
         if let snapshot {
@@ -811,6 +815,20 @@ final class OffTickApp: NSObject, NSApplicationDelegate {
         menu.addItem(NSMenuItem(title: t("quit"), action: #selector(quit), keyEquivalent: "q"))
         menu.items.forEach { $0.target = self }
         return menu
+    }
+
+    private func makeUpdateMenuItem() -> NSMenuItem {
+        if let availableUpdate {
+            return NSMenuItem(title: "\(t("updateAvailable")) \(availableUpdate.displayVersion)", action: #selector(openLatestRelease), keyEquivalent: "")
+        }
+
+        if isCheckingForUpdate {
+            let item = NSMenuItem(title: t("checkingForUpdates"), action: nil, keyEquivalent: "")
+            item.isEnabled = false
+            return item
+        }
+
+        return NSMenuItem(title: t("checkForUpdates"), action: #selector(checkForUpdatesFromMenu), keyEquivalent: "")
     }
 
     private func makeLanguageMenuItem() -> NSMenuItem {
@@ -870,6 +888,66 @@ final class OffTickApp: NSObject, NSApplicationDelegate {
         }
 
         notificationCoordinator.celebrateClockOut(language: settings.language)
+    }
+
+    @objc private func checkForUpdatesFromMenu() {
+        checkForUpdates(silent: false, force: true)
+    }
+
+    @objc private func openLatestRelease() {
+        let url = availableUpdate?.htmlURL ?? GitHubUpdateChecker.releasesURL
+        NSWorkspace.shared.open(url)
+    }
+
+    private func checkForUpdatesIfNeeded() {
+        let defaults = UserDefaults.standard
+        let key = "lastGitHubUpdateCheckAt"
+        if let lastCheck = defaults.object(forKey: key) as? Date,
+           Date().timeIntervalSince(lastCheck) < 24 * 60 * 60 {
+            return
+        }
+
+        defaults.set(Date(), forKey: key)
+        checkForUpdates(silent: true, force: false)
+    }
+
+    private func checkForUpdates(silent: Bool, force: Bool) {
+        guard !isCheckingForUpdate else {
+            return
+        }
+
+        isCheckingForUpdate = true
+        rebuildStatusMenu(snapshot: timeProvider.isSynced ? OffTickSnapshot(settings: settings, now: timeProvider.now) : nil)
+
+        GitHubUpdateChecker.fetchLatestRelease { [weak self] result in
+            DispatchQueue.main.async {
+                guard let self else {
+                    return
+                }
+
+                self.isCheckingForUpdate = false
+
+                switch result {
+                case .success(let release):
+                    if GitHubUpdateChecker.isRelease(release, newerThan: Bundle.main.shortVersionString) {
+                        self.availableUpdate = release
+                        self.rebuildStatusMenu(snapshot: self.timeProvider.isSynced ? OffTickSnapshot(settings: self.settings, now: self.timeProvider.now) : nil)
+                        self.showMessage(title: self.t("updateAvailable"), message: "\(release.displayVersion)\n\(release.summary)") {
+                            NSWorkspace.shared.open(release.htmlURL)
+                        }
+                    } else if !silent || force {
+                        self.availableUpdate = nil
+                        self.rebuildStatusMenu(snapshot: self.timeProvider.isSynced ? OffTickSnapshot(settings: self.settings, now: self.timeProvider.now) : nil)
+                        self.showMessage(title: self.t("noUpdateAvailable"), message: self.t("noUpdateAvailableHint"))
+                    }
+                case .failure(let error):
+                    if !silent || force {
+                        self.showMessage(title: self.t("updateCheckFailed"), message: error.localizedDescription)
+                    }
+                    self.rebuildStatusMenu(snapshot: self.timeProvider.isSynced ? OffTickSnapshot(settings: self.settings, now: self.timeProvider.now) : nil)
+                }
+            }
+        }
     }
 
     private func showFireworks() {
@@ -1092,6 +1170,12 @@ extension OffTickApp: NSTextFieldDelegate {
         }
 
         updateSetting(from: field)
+    }
+}
+
+extension Bundle {
+    var shortVersionString: String {
+        object(forInfoDictionaryKey: "CFBundleShortVersionString") as? String ?? "0.0.0"
     }
 }
 
@@ -1492,6 +1576,12 @@ enum L10n {
             "launchAtLogin": "开机自启动",
             "watermarkIncludeDate": "水印包含导出时间",
             "watermarkIncludeDevice": "水印包含设备号",
+            "checkForUpdates": "检查更新",
+            "checkingForUpdates": "正在检查更新...",
+            "updateAvailable": "发现新版本",
+            "noUpdateAvailable": "已是最新版本",
+            "noUpdateAvailableHint": "当前版本已经是最新版本。",
+            "updateCheckFailed": "检查更新失败",
             "income": "收入",
             "monthlyIncome": "月薪",
             "workdaysInMonth": "本月工作日",
@@ -1537,7 +1627,7 @@ enum L10n {
             "settings": "設定", "hidePanel": "隱藏懸浮窗", "showPanel": "顯示懸浮窗", "quit": "退出 OffTick", "display": "顯示", "language": "語言", "time": "時間", "date": "日期", "hour24": "24小時", "hour12": "12小時", "gregorian": "國曆", "lunar": "農曆", "panelSize": "懸浮窗大小", "panelSizeSmall": "小", "panelSizeMedium": "中", "panelSizeLarge": "大", "panelContent": "懸浮窗內容", "countdown": "下班倒數", "earnedIncome": "今日即時收入", "dailyIncome": "日均收入", "income": "收入", "monthlyIncome": "月薪", "workdaysInMonth": "本月工作日", "timer": "計時", "workMode": "計算方式", "fixedClockOut": "固定下班", "unlockTimer": "解鎖計時", "startTime": "上班時間", "clockOutTime": "下班時間", "dailyHours": "每日時長", "done": "完成", "resetDefault": "恢復預設", "syncingTime": "正在校準網路時間...", "noPanelContent": "未選擇懸浮窗內容", "currentTime": "目前時間", "waitingIncome": "收入：等待網路時間", "waitingUnlock": "等待今日5點後首次解鎖", "clockOutNotificationTitle": "下班啦", "clockOutNotificationBody": "今天辛苦了，OffTick 已經幫你數到下班時間。", "yuan": "元", "days": "天", "hoursUnit": "小時"
         ],
         .english: [
-            "settings": "Settings", "hidePanel": "Hide Floating Window", "showPanel": "Show Floating Window", "quit": "Quit OffTick", "display": "Display", "language": "Language", "time": "Time", "date": "Date", "hour24": "24-hour", "hour12": "12-hour", "gregorian": "Gregorian", "lunar": "Lunar", "panelSize": "Window Size", "panelSizeSmall": "Small", "panelSizeMedium": "Medium", "panelSizeLarge": "Large", "panelContent": "Floating Window", "options": "Options", "watermarkFormat": "Watermark", "countdown": "Clock-out Countdown", "earnedIncome": "Live Earnings", "dailyIncome": "Daily Income", "includePanelInScreenshots": "Include floating window in screenshots", "launchAtLogin": "Launch at login", "watermarkIncludeDate": "Include export time", "watermarkIncludeDevice": "Include device ID", "income": "Income", "monthlyIncome": "Monthly Income", "workdaysInMonth": "Workdays", "timer": "Timer", "workMode": "Mode", "fixedClockOut": "Fixed Clock-out", "unlockTimer": "Unlock Timer", "startTime": "Start Time", "clockOutTime": "Clock-out Time", "dailyHours": "Daily Hours", "done": "Done", "resetDefault": "Reset Defaults", "syncingTime": "Syncing network time...", "noPanelContent": "No floating content selected", "currentTime": "Current Time", "waitingIncome": "Income: waiting for network time", "waitingUnlock": "Waiting for first unlock after 5 AM", "clockOutNotificationTitle": "Time to clock out", "clockOutNotificationBody": "Nice work today. OffTick has counted down to your clock-out time.", "yuan": "CNY", "days": "days", "hoursUnit": "hours", "unlockRecords": "Unlock Records", "exportUnlockRecords": "Export Unlock Records", "exportUnlockRecordsHint": "Enter the export date range in yyyy-MM-dd format.", "exportStartDate": "Start Date", "exportEndDate": "End Date", "export": "Export", "cancel": "Cancel", "invalidDateRange": "Invalid Date Range", "dateRangeFormatHint": "Use yyyy-MM-dd and make sure the start date is not after the end date.", "noUnlockRecords": "No Unlock Records", "noUnlockRecordsHint": "No first unlock after 5 AM was recorded in the selected range.", "exportComplete": "Export Complete", "exportFailed": "Export Failed", "networkTimeUnavailable": "Network Time Unavailable", "networkTimeUnavailableHint": "OffTick could not sync network time. Connect to the internet and try exporting again.", "launchAtLoginFailed": "Could not update launch at login", "launchAtLoginApprovalRequired": "Approval Required", "launchAtLoginApprovalRequiredHint": "Allow OffTick in System Settings > General > Login Items before launch at login takes effect."
+            "settings": "Settings", "hidePanel": "Hide Floating Window", "showPanel": "Show Floating Window", "quit": "Quit OffTick", "display": "Display", "language": "Language", "time": "Time", "date": "Date", "hour24": "24-hour", "hour12": "12-hour", "gregorian": "Gregorian", "lunar": "Lunar", "panelSize": "Window Size", "panelSizeSmall": "Small", "panelSizeMedium": "Medium", "panelSizeLarge": "Large", "panelContent": "Floating Window", "options": "Options", "watermarkFormat": "Watermark", "countdown": "Clock-out Countdown", "earnedIncome": "Live Earnings", "dailyIncome": "Daily Income", "includePanelInScreenshots": "Include floating window in screenshots", "launchAtLogin": "Launch at login", "watermarkIncludeDate": "Include export time", "watermarkIncludeDevice": "Include device ID", "checkForUpdates": "Check for Updates", "checkingForUpdates": "Checking for updates...", "updateAvailable": "Update Available", "noUpdateAvailable": "You are up to date", "noUpdateAvailableHint": "You are already using the latest version.", "updateCheckFailed": "Update Check Failed", "income": "Income", "monthlyIncome": "Monthly Income", "workdaysInMonth": "Workdays", "timer": "Timer", "workMode": "Mode", "fixedClockOut": "Fixed Clock-out", "unlockTimer": "Unlock Timer", "startTime": "Start Time", "clockOutTime": "Clock-out Time", "dailyHours": "Daily Hours", "done": "Done", "resetDefault": "Reset Defaults", "syncingTime": "Syncing network time...", "noPanelContent": "No floating content selected", "currentTime": "Current Time", "waitingIncome": "Income: waiting for network time", "waitingUnlock": "Waiting for first unlock after 5 AM", "clockOutNotificationTitle": "Time to clock out", "clockOutNotificationBody": "Nice work today. OffTick has counted down to your clock-out time.", "yuan": "CNY", "days": "days", "hoursUnit": "hours", "unlockRecords": "Unlock Records", "exportUnlockRecords": "Export Unlock Records", "exportUnlockRecordsHint": "Enter the export date range in yyyy-MM-dd format.", "exportStartDate": "Start Date", "exportEndDate": "End Date", "export": "Export", "cancel": "Cancel", "invalidDateRange": "Invalid Date Range", "dateRangeFormatHint": "Use yyyy-MM-dd and make sure the start date is not after the end date.", "noUnlockRecords": "No Unlock Records", "noUnlockRecordsHint": "No first unlock after 5 AM was recorded in the selected range.", "exportComplete": "Export Complete", "exportFailed": "Export Failed", "networkTimeUnavailable": "Network Time Unavailable", "networkTimeUnavailableHint": "OffTick could not sync network time. Connect to the internet and try exporting again.", "launchAtLoginFailed": "Could not update launch at login", "launchAtLoginApprovalRequired": "Approval Required", "launchAtLoginApprovalRequiredHint": "Allow OffTick in System Settings > General > Login Items before launch at login takes effect."
         ],
         .japanese: [
             "settings": "設定", "hidePanel": "フローティングウィンドウを隠す", "showPanel": "フローティングウィンドウを表示", "quit": "OffTick を終了", "display": "表示", "language": "言語", "time": "時刻", "date": "日付", "hour24": "24時間", "hour12": "12時間", "gregorian": "西暦", "lunar": "旧暦", "panelSize": "ウィンドウサイズ", "panelSizeSmall": "小", "panelSizeMedium": "中", "panelSizeLarge": "大", "panelContent": "表示内容", "countdown": "退勤カウントダウン", "earnedIncome": "本日のリアルタイム収入", "dailyIncome": "日収", "income": "収入", "monthlyIncome": "月収", "workdaysInMonth": "今月の出勤日", "timer": "タイマー", "workMode": "計算方式", "fixedClockOut": "固定退勤", "unlockTimer": "ロック解除計時", "startTime": "始業時刻", "clockOutTime": "退勤時刻", "dailyHours": "1日の勤務時間", "done": "完了", "resetDefault": "初期値に戻す", "syncingTime": "ネットワーク時刻を同期中...", "noPanelContent": "表示内容が選択されていません", "currentTime": "現在時刻", "waitingIncome": "収入：時刻同期待ち", "waitingUnlock": "今日5時以降の初回ロック解除待ち", "clockOutNotificationTitle": "退勤時間です", "clockOutNotificationBody": "今日もお疲れさまでした。OffTick が退勤時間を知らせます。", "yuan": "元", "days": "日", "hoursUnit": "時間"
@@ -1603,6 +1693,105 @@ final class NotificationCoordinator {
                 NSHapticFeedbackManager.defaultPerformer.perform(.generic, performanceTime: .now)
             }
         }
+    }
+}
+
+struct GitHubRelease: Decodable {
+    let tagName: String
+    let name: String?
+    let body: String?
+    let htmlURL: URL
+    let draft: Bool
+    let prerelease: Bool
+
+    var displayVersion: String {
+        tagName.hasPrefix("v") ? String(tagName.dropFirst()) : tagName
+    }
+
+    var summary: String {
+        let text = body?.trimmingCharacters(in: .whitespacesAndNewlines) ?? ""
+        guard !text.isEmpty else {
+            return name ?? ""
+        }
+
+        return String(text.prefix(600))
+    }
+
+    private enum CodingKeys: String, CodingKey {
+        case tagName = "tag_name"
+        case name
+        case body
+        case htmlURL = "html_url"
+        case draft
+        case prerelease
+    }
+}
+
+enum GitHubUpdateChecker {
+    static let releasesURL = URL(string: "https://github.com/eveoh354/OffTick/releases")!
+    private static let latestReleaseURL = URL(string: "https://api.github.com/repos/eveoh354/OffTick/releases/latest")!
+
+    static func fetchLatestRelease(completion: @escaping (Result<GitHubRelease, Error>) -> Void) {
+        var request = URLRequest(url: latestReleaseURL)
+        request.setValue("application/vnd.github+json", forHTTPHeaderField: "Accept")
+        request.setValue("OffTick", forHTTPHeaderField: "User-Agent")
+        request.timeoutInterval = 8
+
+        URLSession.shared.dataTask(with: request) { data, response, error in
+            if let error {
+                completion(.failure(error))
+                return
+            }
+
+            guard let httpResponse = response as? HTTPURLResponse,
+                  (200..<300).contains(httpResponse.statusCode),
+                  let data else {
+                completion(.failure(NSError(domain: "OffTick", code: 1, userInfo: [NSLocalizedDescriptionKey: "Unable to fetch GitHub releases."])))
+                return
+            }
+
+            do {
+                completion(.success(try JSONDecoder().decode(GitHubRelease.self, from: data)))
+            } catch {
+                completion(.failure(error))
+            }
+        }.resume()
+    }
+
+    static func isRelease(_ release: GitHubRelease, newerThan currentVersion: String) -> Bool {
+        guard !release.draft else {
+            return false
+        }
+
+        return compareVersions(release.displayVersion, currentVersion) == .orderedDescending
+    }
+
+    private static func compareVersions(_ lhs: String, _ rhs: String) -> ComparisonResult {
+        let leftParts = versionParts(lhs)
+        let rightParts = versionParts(rhs)
+        let count = max(leftParts.count, rightParts.count)
+
+        for index in 0..<count {
+            let left = index < leftParts.count ? leftParts[index] : 0
+            let right = index < rightParts.count ? rightParts[index] : 0
+            if left > right {
+                return .orderedDescending
+            }
+            if left < right {
+                return .orderedAscending
+            }
+        }
+
+        return .orderedSame
+    }
+
+    private static func versionParts(_ version: String) -> [Int] {
+        version
+            .trimmingCharacters(in: CharacterSet(charactersIn: "vV"))
+            .split(separator: ".")
+            .map { part in
+                Int(part.prefix { $0.isNumber }) ?? 0
+            }
     }
 }
 

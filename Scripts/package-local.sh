@@ -5,12 +5,15 @@ ROOT_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")/.." && pwd)"
 APP_NAME="OffTick"
 VERSION="${MARKETING_VERSION:-0.1.0}"
 DIST_DIR="$ROOT_DIR/dist"
-PACKAGE_DIR="$DIST_DIR/$APP_NAME-$VERSION-local"
-ZIP_PATH="$DIST_DIR/$APP_NAME-$VERSION-local.zip"
+PACKAGE_DIR="$DIST_DIR/$APP_NAME-$VERSION"
+ZIP_PATH="$DIST_DIR/$APP_NAME-$VERSION.zip"
+CHECKSUM_PATH="$ZIP_PATH.sha256"
+RELEASE_NOTES_PATH="$DIST_DIR/RELEASE_NOTES-$VERSION.md"
 
 APP_DIR="$("$ROOT_DIR/Scripts/build-app.sh" | tail -n 1)"
 
-rm -rf "$PACKAGE_DIR" "$ZIP_PATH"
+rm -rf "$PACKAGE_DIR" "$ZIP_PATH" "$CHECKSUM_PATH" "$RELEASE_NOTES_PATH" \
+    "$DIST_DIR/$APP_NAME-$VERSION-local" "$DIST_DIR/$APP_NAME-$VERSION-local.zip"
 mkdir -p "$PACKAGE_DIR"
 cp -R "$APP_DIR" "$PACKAGE_DIR/"
 
@@ -32,7 +35,31 @@ TEXT
 (
     cd "$DIST_DIR"
     ditto -c -k --sequesterRsrc --keepParent "$(basename "$PACKAGE_DIR")" "$(basename "$ZIP_PATH")"
+    shasum -a 256 "$(basename "$ZIP_PATH")" > "$(basename "$CHECKSUM_PATH")"
 )
+
+CHECKSUM="$(awk '{print $1}' "$CHECKSUM_PATH")"
+cat > "$RELEASE_NOTES_PATH" <<TEXT
+# OffTick $VERSION
+
+This is a locally signed, non-notarized macOS test build.
+
+## Download
+
+- App package: \`$(basename "$ZIP_PATH")\`
+- SHA256: \`$CHECKSUM\`
+
+## First Launch
+
+1. Download and unzip \`$(basename "$ZIP_PATH")\`.
+2. Drag \`OffTick.app\` to Applications.
+3. Control-click \`OffTick.app\`, then choose Open.
+4. If macOS still blocks it, open System Settings > Privacy & Security, then choose Open Anyway.
+
+## Notes
+
+This build is not notarized with Apple Developer ID. macOS may show a security warning on first launch.
+TEXT
 
 codesign --verify --deep --strict "$PACKAGE_DIR/$APP_NAME.app"
 echo "$ZIP_PATH"
