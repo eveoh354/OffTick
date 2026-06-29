@@ -656,12 +656,15 @@ final class OffTickApp: NSObject, NSApplicationDelegate {
             stackView.addArrangedSubview(makeVerticalMetric(caption: t("countdown"), value: snapshot.countdownText(), color: .controlAccentColor))
         }
 
+        var hasAddedIncomeVisibilityButton = false
+
         if settings.showEarnedIncomeInPanel {
-            stackView.addArrangedSubview(makeMetric(caption: t("earnedIncome"), value: String(format: "¥%.2f", snapshot.earnedToday()), color: .labelColor))
+            stackView.addArrangedSubview(makeMetric(caption: t("earnedIncome"), value: String(format: "¥%.2f", snapshot.earnedToday()), color: .labelColor, isPrivate: true, showsPrivacyToggle: true))
+            hasAddedIncomeVisibilityButton = true
         }
 
         if settings.showDailyIncomeInPanel {
-            stackView.addArrangedSubview(makeMetric(caption: t("dailyIncome"), value: String(format: "¥%.2f", settings.dailyIncome), color: .labelColor))
+            stackView.addArrangedSubview(makeMetric(caption: t("dailyIncome"), value: String(format: "¥%.2f", settings.dailyIncome), color: .labelColor, isPrivate: true, showsPrivacyToggle: !hasAddedIncomeVisibilityButton))
         }
     }
 
@@ -695,11 +698,11 @@ final class OffTickApp: NSObject, NSApplicationDelegate {
         return label
     }
 
-    private func makeMetric(caption: String, value: String, color: NSColor) -> NSStackView {
+    private func makeMetric(caption: String, value: String, color: NSColor, isPrivate: Bool = false, showsPrivacyToggle: Bool = false) -> NSStackView {
         let metrics = settings.panelSize
         let row = NSStackView()
         row.orientation = .horizontal
-        row.alignment = .firstBaseline
+        row.alignment = .centerY
         row.spacing = metrics.metricSpacing
         row.translatesAutoresizingMaskIntoConstraints = false
         row.widthAnchor.constraint(equalToConstant: metrics.contentWidth).isActive = true
@@ -707,12 +710,59 @@ final class OffTickApp: NSObject, NSApplicationDelegate {
         let captionLabel = makeLabel(caption, size: metrics.captionFontSize, weight: .medium, color: .secondaryLabelColor)
         captionLabel.widthAnchor.constraint(equalToConstant: metrics.captionWidth).isActive = true
 
-        let valueLabel = makeLabel(value, size: metrics.valueFontSize, weight: .semibold, color: color)
+        let displayValue = isPrivate && !settings.showIncomeDetailsInPanel ? "¥****" : value
+        let valueLabel = makeLabel(displayValue, size: metrics.valueFontSize, weight: .semibold, color: color)
         valueLabel.font = .monospacedDigitSystemFont(ofSize: metrics.valueFontSize, weight: .semibold)
+        valueLabel.setContentCompressionResistancePriority(.defaultLow, for: .horizontal)
 
         row.addArrangedSubview(captionLabel)
         row.addArrangedSubview(valueLabel)
+
+        if showsPrivacyToggle {
+            row.addArrangedSubview(makeIncomeVisibilityButton())
+        }
+
         return row
+    }
+
+    private func makeIncomeVisibilityButton() -> NSButton {
+        let symbolName = settings.showIncomeDetailsInPanel ? "eye" : "eye.slash"
+        let toolTip = incomeVisibilityTooltip()
+        let button = NSButton(image: NSImage(systemSymbolName: symbolName, accessibilityDescription: toolTip) ?? NSImage(), target: self, action: #selector(toggleIncomeVisibility))
+        button.isBordered = false
+        button.imagePosition = .imageOnly
+        button.imageScaling = .scaleProportionallyDown
+        button.contentTintColor = .secondaryLabelColor
+        button.toolTip = toolTip
+        button.translatesAutoresizingMaskIntoConstraints = false
+        button.widthAnchor.constraint(equalToConstant: 20).isActive = true
+        button.heightAnchor.constraint(equalToConstant: 18).isActive = true
+        return button
+    }
+
+    private func incomeVisibilityTooltip() -> String {
+        switch (settings.language, settings.showIncomeDetailsInPanel) {
+        case (.simplifiedChinese, true): return "隐藏收入"
+        case (.simplifiedChinese, false): return "显示收入"
+        case (.traditionalChinese, true): return "隱藏收入"
+        case (.traditionalChinese, false): return "顯示收入"
+        case (.japanese, true): return "収入を隠す"
+        case (.japanese, false): return "収入を表示"
+        case (.korean, true): return "수입 숨기기"
+        case (.korean, false): return "수입 표시"
+        case (.spanish, true): return "Ocultar ingresos"
+        case (.spanish, false): return "Mostrar ingresos"
+        case (.french, true): return "Masquer le revenu"
+        case (.french, false): return "Afficher le revenu"
+        case (.german, true): return "Einkommen ausblenden"
+        case (.german, false): return "Einkommen anzeigen"
+        case (.portuguese, true): return "Ocultar renda"
+        case (.portuguese, false): return "Mostrar renda"
+        case (.russian, true): return "Скрыть доход"
+        case (.russian, false): return "Показать доход"
+        case (.english, true): return "Hide income"
+        case (.english, false): return "Show income"
+        }
     }
 
     private func makeVerticalMetric(caption: String, value: String, color: NSColor) -> NSStackView {
@@ -1069,6 +1119,12 @@ final class OffTickApp: NSObject, NSApplicationDelegate {
         }
 
         settings.save()
+    }
+
+    @objc private func toggleIncomeVisibility() {
+        settings.showIncomeDetailsInPanel.toggle()
+        settings.save()
+        updateContent()
     }
 
     @objc private func calendarModeChanged(_ sender: NSSegmentedControl) {
@@ -2042,6 +2098,7 @@ struct WorkSettings {
     var showCountdownInPanel: Bool
     var showEarnedIncomeInPanel: Bool
     var showDailyIncomeInPanel: Bool
+    var showIncomeDetailsInPanel: Bool
     var includePanelInScreenshots: Bool
     var includeDateInExportWatermark: Bool
     var includeDeviceInExportWatermark: Bool
@@ -2069,6 +2126,7 @@ struct WorkSettings {
             showCountdownInPanel: true,
             showEarnedIncomeInPanel: false,
             showDailyIncomeInPanel: false,
+            showIncomeDetailsInPanel: true,
             includePanelInScreenshots: false,
             includeDateInExportWatermark: true,
             includeDeviceInExportWatermark: true
@@ -2109,6 +2167,7 @@ struct WorkSettings {
             showCountdownInPanel: defaults.object(forKey: "showCountdownInPanel").map { _ in defaults.bool(forKey: "showCountdownInPanel") } ?? fallback.showCountdownInPanel,
             showEarnedIncomeInPanel: defaults.object(forKey: "showEarnedIncomeInPanel").map { _ in defaults.bool(forKey: "showEarnedIncomeInPanel") } ?? fallback.showEarnedIncomeInPanel,
             showDailyIncomeInPanel: defaults.object(forKey: "showDailyIncomeInPanel").map { _ in defaults.bool(forKey: "showDailyIncomeInPanel") } ?? fallback.showDailyIncomeInPanel,
+            showIncomeDetailsInPanel: defaults.object(forKey: "showIncomeDetailsInPanel").map { _ in defaults.bool(forKey: "showIncomeDetailsInPanel") } ?? fallback.showIncomeDetailsInPanel,
             includePanelInScreenshots: defaults.object(forKey: "includePanelInScreenshots").map { _ in defaults.bool(forKey: "includePanelInScreenshots") } ?? fallback.includePanelInScreenshots,
             includeDateInExportWatermark: defaults.object(forKey: "includeDateInExportWatermark").map { _ in defaults.bool(forKey: "includeDateInExportWatermark") } ?? fallback.includeDateInExportWatermark,
             includeDeviceInExportWatermark: defaults.object(forKey: "includeDeviceInExportWatermark").map { _ in defaults.bool(forKey: "includeDeviceInExportWatermark") } ?? fallback.includeDeviceInExportWatermark
@@ -2140,6 +2199,7 @@ struct WorkSettings {
             "showCountdownInPanel",
             "showEarnedIncomeInPanel",
             "showDailyIncomeInPanel",
+            "showIncomeDetailsInPanel",
             "includePanelInScreenshots",
             "includeDateInExportWatermark",
             "includeDeviceInExportWatermark",
@@ -2186,6 +2246,7 @@ struct WorkSettings {
         defaults.set(sanitized.showCountdownInPanel, forKey: "showCountdownInPanel")
         defaults.set(sanitized.showEarnedIncomeInPanel, forKey: "showEarnedIncomeInPanel")
         defaults.set(sanitized.showDailyIncomeInPanel, forKey: "showDailyIncomeInPanel")
+        defaults.set(sanitized.showIncomeDetailsInPanel, forKey: "showIncomeDetailsInPanel")
         defaults.set(sanitized.includePanelInScreenshots, forKey: "includePanelInScreenshots")
         defaults.set(sanitized.includeDateInExportWatermark, forKey: "includeDateInExportWatermark")
         defaults.set(sanitized.includeDeviceInExportWatermark, forKey: "includeDeviceInExportWatermark")
@@ -2210,6 +2271,7 @@ struct WorkSettings {
             showCountdownInPanel: showCountdownInPanel,
             showEarnedIncomeInPanel: showEarnedIncomeInPanel,
             showDailyIncomeInPanel: showDailyIncomeInPanel,
+            showIncomeDetailsInPanel: showIncomeDetailsInPanel,
             includePanelInScreenshots: includePanelInScreenshots,
             includeDateInExportWatermark: includeDateInExportWatermark,
             includeDeviceInExportWatermark: includeDeviceInExportWatermark
