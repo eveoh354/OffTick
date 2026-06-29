@@ -15,9 +15,16 @@ final class OffTickApp: NSObject, NSApplicationDelegate {
     private weak var liveDailyMenuItem: NSMenuItem?
     private weak var liveTimeMenuItem: NSMenuItem?
     private weak var liveCountdownMenuItem: NSMenuItem?
+    private var stackLeadingConstraint: NSLayoutConstraint?
+    private var stackTrailingConstraint: NSLayoutConstraint?
+    private var stackTopConstraint: NSLayoutConstraint?
+    private var stackBottomConstraint: NSLayoutConstraint?
     private var instanceLockFileDescriptor: Int32 = -1
     private let notificationCoordinator = NotificationCoordinator()
     private var previousClockOutState: Bool?
+    private var panelContentInsets: NSEdgeInsets {
+        settings.panelSize.contentInsets
+    }
 
     private var settings = WorkSettings.load()
 
@@ -184,7 +191,7 @@ final class OffTickApp: NSObject, NSApplicationDelegate {
         stackView = NSStackView()
         stackView.orientation = .vertical
         stackView.alignment = .leading
-        stackView.spacing = 10
+        stackView.spacing = settings.panelSize.stackSpacing
         stackView.translatesAutoresizingMaskIntoConstraints = false
 
         let container = makePanelBackgroundView()
@@ -194,12 +201,17 @@ final class OffTickApp: NSObject, NSApplicationDelegate {
         contentContainer.addSubview(stackView)
         panel.contentView = container
 
+        stackLeadingConstraint = stackView.leadingAnchor.constraint(equalTo: contentContainer.leadingAnchor, constant: panelContentInsets.left)
+        stackTrailingConstraint = stackView.trailingAnchor.constraint(equalTo: contentContainer.trailingAnchor, constant: -panelContentInsets.right)
+        stackTopConstraint = stackView.topAnchor.constraint(equalTo: contentContainer.topAnchor, constant: panelContentInsets.top)
+        stackBottomConstraint = stackView.bottomAnchor.constraint(lessThanOrEqualTo: contentContainer.bottomAnchor, constant: -panelContentInsets.bottom)
+
         NSLayoutConstraint.activate([
-            stackView.leadingAnchor.constraint(equalTo: contentContainer.leadingAnchor, constant: 20),
-            stackView.trailingAnchor.constraint(equalTo: contentContainer.trailingAnchor, constant: -20),
-            stackView.topAnchor.constraint(equalTo: contentContainer.topAnchor, constant: 18),
-            stackView.bottomAnchor.constraint(lessThanOrEqualTo: contentContainer.bottomAnchor, constant: -18)
-        ])
+            stackLeadingConstraint,
+            stackTrailingConstraint,
+            stackTopConstraint,
+            stackBottomConstraint
+        ].compactMap { $0 })
     }
 
     private func makePanelBackgroundView() -> NSView {
@@ -365,7 +377,7 @@ final class OffTickApp: NSObject, NSApplicationDelegate {
 
     private func renderSettings() {
         clearStack()
-        panel.setContentSize(NSSize(width: 340, height: 584))
+        panel.setContentSize(NSSize(width: 340, height: 612))
 
         let title = makeLabel(t("settings"), size: 18, weight: .semibold)
         stackView.addArrangedSubview(title)
@@ -386,6 +398,12 @@ final class OffTickApp: NSObject, NSApplicationDelegate {
         calendarControl.translatesAutoresizingMaskIntoConstraints = false
         calendarControl.widthAnchor.constraint(equalToConstant: 170).isActive = true
         stackView.addArrangedSubview(makeRow(label: t("date"), control: calendarControl, suffix: nil))
+
+        let panelSizeControl = NSSegmentedControl(labels: PanelSizeMode.allCases.map { t($0.titleKey) }, trackingMode: .selectOne, target: self, action: #selector(panelSizeChanged(_:)))
+        panelSizeControl.selectedSegment = PanelSizeMode.allCases.firstIndex(of: settings.panelSize) ?? 1
+        panelSizeControl.translatesAutoresizingMaskIntoConstraints = false
+        panelSizeControl.widthAnchor.constraint(equalToConstant: 170).isActive = true
+        stackView.addArrangedSubview(makeRow(label: t("panelSize"), control: panelSizeControl, suffix: nil))
 
         stackView.addArrangedSubview(makeSectionTitle(t("panelContent")))
         stackView.addArrangedSubview(makeCheckbox(title: t("date"), isOn: settings.showDateInPanel, action: #selector(panelContentChanged(_:)), tag: PanelContentField.date.rawValue))
@@ -578,34 +596,38 @@ final class OffTickApp: NSObject, NSApplicationDelegate {
 
     private func renderSyncing() {
         clearStack()
-        panel.setContentSize(NSSize(width: 286, height: 104))
+        let metrics = settings.panelSize
+        applyPanelLayoutMetrics(metrics)
+        panel.setContentSize(NSSize(width: metrics.panelWidth, height: metrics.syncingHeight))
 
-        stackView.addArrangedSubview(makeLabel("OffTick", size: 13, weight: .semibold, color: .secondaryLabelColor))
-        stackView.addArrangedSubview(makeLabel(t("syncingTime"), size: 18, weight: .semibold))
+        stackView.addArrangedSubview(makeLabel("OffTick", size: metrics.brandFontSize, weight: .semibold, color: .secondaryLabelColor))
+        stackView.addArrangedSubview(makeLabel(t("syncingTime"), size: metrics.messageFontSize, weight: .semibold))
     }
 
     private func renderOverview(snapshot: OffTickSnapshot) {
         clearStack()
+        let metrics = settings.panelSize
+        applyPanelLayoutMetrics(metrics)
         let visibleItemCount = settings.panelVisibleItemCount
-        let panelHeight = max(106, 50 + visibleItemCount * 36)
-        panel.setContentSize(NSSize(width: 286, height: panelHeight))
+        let panelHeight = max(metrics.minimumPanelHeight, metrics.heightBase + CGFloat(visibleItemCount) * metrics.itemHeight)
+        panel.setContentSize(NSSize(width: metrics.panelWidth, height: panelHeight))
 
         if visibleItemCount == 0 {
-            stackView.addArrangedSubview(makeLabel("OffTick", size: 13, weight: .semibold, color: .secondaryLabelColor))
-            stackView.addArrangedSubview(makeLabel(t("noPanelContent"), size: 18, weight: .semibold))
+            stackView.addArrangedSubview(makeLabel("OffTick", size: metrics.brandFontSize, weight: .semibold, color: .secondaryLabelColor))
+            stackView.addArrangedSubview(makeLabel(t("noPanelContent"), size: metrics.messageFontSize, weight: .semibold))
             return
         }
 
         var hasAddedPrimary = false
 
         if settings.showDateInPanel {
-            let dateLabel = makeLabel(snapshot.dateText(), size: 12, weight: .medium, color: .secondaryLabelColor)
+            let dateLabel = makeLabel(snapshot.dateText(), size: metrics.dateFontSize, weight: .medium, color: .secondaryLabelColor)
             stackView.addArrangedSubview(dateLabel)
         }
 
         if settings.showTimeInPanel {
-            let timeLabel = makeLabel(snapshot.timeText(), size: 28, weight: .semibold)
-            timeLabel.font = .monospacedDigitSystemFont(ofSize: 28, weight: .semibold)
+            let timeLabel = makeLabel(snapshot.timeText(), size: metrics.timeFontSize, weight: .semibold)
+            timeLabel.font = .monospacedDigitSystemFont(ofSize: metrics.timeFontSize, weight: .semibold)
             stackView.addArrangedSubview(timeLabel)
             hasAddedPrimary = true
         }
@@ -634,6 +656,15 @@ final class OffTickApp: NSObject, NSApplicationDelegate {
         }
     }
 
+    private func applyPanelLayoutMetrics(_ metrics: PanelSizeMode) {
+        let insets = metrics.contentInsets
+        stackView.spacing = metrics.stackSpacing
+        stackLeadingConstraint?.constant = insets.left
+        stackTrailingConstraint?.constant = -insets.right
+        stackTopConstraint?.constant = insets.top
+        stackBottomConstraint?.constant = -insets.bottom
+    }
+
     private func makeLabel(_ text: String, size: CGFloat, weight: NSFont.Weight, color: NSColor = .labelColor) -> NSTextField {
         let label = NSTextField(labelWithString: text)
         label.font = .systemFont(ofSize: size, weight: weight)
@@ -649,18 +680,19 @@ final class OffTickApp: NSObject, NSApplicationDelegate {
     }
 
     private func makeMetric(caption: String, value: String, color: NSColor) -> NSStackView {
+        let metrics = settings.panelSize
         let row = NSStackView()
         row.orientation = .horizontal
         row.alignment = .firstBaseline
-        row.spacing = 10
+        row.spacing = metrics.metricSpacing
         row.translatesAutoresizingMaskIntoConstraints = false
-        row.widthAnchor.constraint(equalToConstant: 246).isActive = true
+        row.widthAnchor.constraint(equalToConstant: metrics.contentWidth).isActive = true
 
-        let captionLabel = makeLabel(caption, size: 11, weight: .medium, color: .secondaryLabelColor)
-        captionLabel.widthAnchor.constraint(equalToConstant: 78).isActive = true
+        let captionLabel = makeLabel(caption, size: metrics.captionFontSize, weight: .medium, color: .secondaryLabelColor)
+        captionLabel.widthAnchor.constraint(equalToConstant: metrics.captionWidth).isActive = true
 
-        let valueLabel = makeLabel(value, size: 18, weight: .semibold, color: color)
-        valueLabel.font = .monospacedDigitSystemFont(ofSize: 18, weight: .semibold)
+        let valueLabel = makeLabel(value, size: metrics.valueFontSize, weight: .semibold, color: color)
+        valueLabel.font = .monospacedDigitSystemFont(ofSize: metrics.valueFontSize, weight: .semibold)
 
         row.addArrangedSubview(captionLabel)
         row.addArrangedSubview(valueLabel)
@@ -668,16 +700,17 @@ final class OffTickApp: NSObject, NSApplicationDelegate {
     }
 
     private func makeVerticalMetric(caption: String, value: String, color: NSColor) -> NSStackView {
+        let metrics = settings.panelSize
         let group = NSStackView()
         group.orientation = .vertical
         group.alignment = .leading
-        group.spacing = 4
+        group.spacing = metrics.verticalMetricSpacing
         group.translatesAutoresizingMaskIntoConstraints = false
-        group.widthAnchor.constraint(equalToConstant: 246).isActive = true
+        group.widthAnchor.constraint(equalToConstant: metrics.contentWidth).isActive = true
 
-        let captionLabel = makeLabel(caption, size: 11, weight: .medium, color: .secondaryLabelColor)
-        let valueLabel = makeLabel(value, size: 19, weight: .semibold, color: color)
-        valueLabel.font = .monospacedDigitSystemFont(ofSize: 19, weight: .semibold)
+        let captionLabel = makeLabel(caption, size: metrics.captionFontSize, weight: .medium, color: .secondaryLabelColor)
+        let valueLabel = makeLabel(value, size: metrics.countdownFontSize, weight: .semibold, color: color)
+        valueLabel.font = .monospacedDigitSystemFont(ofSize: metrics.countdownFontSize, weight: .semibold)
 
         group.addArrangedSubview(captionLabel)
         group.addArrangedSubview(valueLabel)
@@ -714,7 +747,7 @@ final class OffTickApp: NSObject, NSApplicationDelegate {
         let separator = NSBox()
         separator.boxType = .separator
         separator.translatesAutoresizingMaskIntoConstraints = false
-        separator.widthAnchor.constraint(equalToConstant: 246).isActive = true
+        separator.widthAnchor.constraint(equalToConstant: isShowingSettings ? 246 : settings.panelSize.contentWidth).isActive = true
         return separator
     }
 
@@ -912,6 +945,16 @@ final class OffTickApp: NSObject, NSApplicationDelegate {
         settings.save()
     }
 
+    @objc private func panelSizeChanged(_ sender: NSSegmentedControl) {
+        guard PanelSizeMode.allCases.indices.contains(sender.selectedSegment) else {
+            return
+        }
+
+        settings.panelSize = PanelSizeMode.allCases[sender.selectedSegment]
+        settings.save()
+        updateContent()
+    }
+
     @objc private func languagePopUpChanged(_ sender: NSPopUpButton) {
         guard let language = AppLanguage(rawValue: sender.selectedItem?.tag ?? settings.language.rawValue) else {
             return
@@ -1091,6 +1134,224 @@ enum CalendarMode {
     }
 }
 
+enum PanelSizeMode: String, CaseIterable {
+    static let storageKey = "panelSizeMode"
+
+    case small
+    case medium
+    case large
+
+    var storageValue: String {
+        rawValue
+    }
+
+    var titleKey: String {
+        switch self {
+        case .small:
+            return "panelSizeSmall"
+        case .medium:
+            return "panelSizeMedium"
+        case .large:
+            return "panelSizeLarge"
+        }
+    }
+
+    var panelWidth: CGFloat {
+        switch self {
+        case .small:
+            return 246
+        case .medium:
+            return 286
+        case .large:
+            return 342
+        }
+    }
+
+    var contentInsets: NSEdgeInsets {
+        switch self {
+        case .small:
+            return NSEdgeInsets(top: 14, left: 16, bottom: 14, right: 16)
+        case .medium:
+            return NSEdgeInsets(top: 18, left: 20, bottom: 18, right: 20)
+        case .large:
+            return NSEdgeInsets(top: 22, left: 24, bottom: 22, right: 24)
+        }
+    }
+
+    var contentWidth: CGFloat {
+        panelWidth - contentInsets.left - contentInsets.right
+    }
+
+    var syncingHeight: CGFloat {
+        switch self {
+        case .small:
+            return 88
+        case .medium:
+            return 104
+        case .large:
+            return 122
+        }
+    }
+
+    var minimumPanelHeight: CGFloat {
+        switch self {
+        case .small:
+            return 92
+        case .medium:
+            return 106
+        case .large:
+            return 128
+        }
+    }
+
+    var heightBase: CGFloat {
+        switch self {
+        case .small:
+            return 42
+        case .medium:
+            return 50
+        case .large:
+            return 60
+        }
+    }
+
+    var itemHeight: CGFloat {
+        switch self {
+        case .small:
+            return 31
+        case .medium:
+            return 36
+        case .large:
+            return 43
+        }
+    }
+
+    var stackSpacing: CGFloat {
+        switch self {
+        case .small:
+            return 8
+        case .medium:
+            return 10
+        case .large:
+            return 12
+        }
+    }
+
+    var metricSpacing: CGFloat {
+        switch self {
+        case .small:
+            return 8
+        case .medium:
+            return 10
+        case .large:
+            return 12
+        }
+    }
+
+    var verticalMetricSpacing: CGFloat {
+        switch self {
+        case .small:
+            return 3
+        case .medium:
+            return 4
+        case .large:
+            return 5
+        }
+    }
+
+    var brandFontSize: CGFloat {
+        switch self {
+        case .small:
+            return 12
+        case .medium:
+            return 13
+        case .large:
+            return 14
+        }
+    }
+
+    var messageFontSize: CGFloat {
+        switch self {
+        case .small:
+            return 16
+        case .medium:
+            return 18
+        case .large:
+            return 21
+        }
+    }
+
+    var dateFontSize: CGFloat {
+        switch self {
+        case .small:
+            return 11
+        case .medium:
+            return 12
+        case .large:
+            return 14
+        }
+    }
+
+    var timeFontSize: CGFloat {
+        switch self {
+        case .small:
+            return 24
+        case .medium:
+            return 28
+        case .large:
+            return 34
+        }
+    }
+
+    var captionFontSize: CGFloat {
+        switch self {
+        case .small:
+            return 10
+        case .medium:
+            return 11
+        case .large:
+            return 12
+        }
+    }
+
+    var valueFontSize: CGFloat {
+        switch self {
+        case .small:
+            return 16
+        case .medium:
+            return 18
+        case .large:
+            return 21
+        }
+    }
+
+    var countdownFontSize: CGFloat {
+        switch self {
+        case .small:
+            return 17
+        case .medium:
+            return 19
+        case .large:
+            return 23
+        }
+    }
+
+    var captionWidth: CGFloat {
+        switch self {
+        case .small:
+            return 68
+        case .medium:
+            return 78
+        case .large:
+            return 92
+        }
+    }
+
+    init(storageValue: String) {
+        self = PanelSizeMode(rawValue: storageValue) ?? .medium
+    }
+}
+
 enum AppLanguage: Int, CaseIterable {
     static let storageKey = "appLanguage"
 
@@ -1174,6 +1435,10 @@ enum L10n {
             "hour12": "12小时",
             "gregorian": "国历",
             "lunar": "农历",
+            "panelSize": "悬浮窗大小",
+            "panelSizeSmall": "小",
+            "panelSizeMedium": "中",
+            "panelSizeLarge": "大",
             "panelContent": "悬浮窗内容",
             "countdown": "下班倒计时",
             "earnedIncome": "今日实时收入",
@@ -1218,31 +1483,31 @@ enum L10n {
             "networkTimeUnavailableHint": "OffTick 暂时无法校准网络时间，请联网后再导出。"
         ],
         .traditionalChinese: [
-            "settings": "設定", "hidePanel": "隱藏懸浮窗", "showPanel": "顯示懸浮窗", "quit": "退出 OffTick", "display": "顯示", "language": "語言", "time": "時間", "date": "日期", "hour24": "24小時", "hour12": "12小時", "gregorian": "國曆", "lunar": "農曆", "panelContent": "懸浮窗內容", "countdown": "下班倒數", "earnedIncome": "今日即時收入", "dailyIncome": "日均收入", "income": "收入", "monthlyIncome": "月薪", "workdaysInMonth": "本月工作日", "timer": "計時", "workMode": "計算方式", "fixedClockOut": "固定下班", "unlockTimer": "解鎖計時", "startTime": "上班時間", "clockOutTime": "下班時間", "dailyHours": "每日時長", "done": "完成", "resetDefault": "恢復預設", "syncingTime": "正在校準網路時間...", "noPanelContent": "未選擇懸浮窗內容", "currentTime": "目前時間", "waitingIncome": "收入：等待網路時間", "waitingUnlock": "等待今日5點後首次解鎖", "clockOutNotificationTitle": "下班啦", "clockOutNotificationBody": "今天辛苦了，OffTick 已經幫你數到下班時間。", "yuan": "元", "days": "天", "hoursUnit": "小時"
+            "settings": "設定", "hidePanel": "隱藏懸浮窗", "showPanel": "顯示懸浮窗", "quit": "退出 OffTick", "display": "顯示", "language": "語言", "time": "時間", "date": "日期", "hour24": "24小時", "hour12": "12小時", "gregorian": "國曆", "lunar": "農曆", "panelSize": "懸浮窗大小", "panelSizeSmall": "小", "panelSizeMedium": "中", "panelSizeLarge": "大", "panelContent": "懸浮窗內容", "countdown": "下班倒數", "earnedIncome": "今日即時收入", "dailyIncome": "日均收入", "income": "收入", "monthlyIncome": "月薪", "workdaysInMonth": "本月工作日", "timer": "計時", "workMode": "計算方式", "fixedClockOut": "固定下班", "unlockTimer": "解鎖計時", "startTime": "上班時間", "clockOutTime": "下班時間", "dailyHours": "每日時長", "done": "完成", "resetDefault": "恢復預設", "syncingTime": "正在校準網路時間...", "noPanelContent": "未選擇懸浮窗內容", "currentTime": "目前時間", "waitingIncome": "收入：等待網路時間", "waitingUnlock": "等待今日5點後首次解鎖", "clockOutNotificationTitle": "下班啦", "clockOutNotificationBody": "今天辛苦了，OffTick 已經幫你數到下班時間。", "yuan": "元", "days": "天", "hoursUnit": "小時"
         ],
         .english: [
-            "settings": "Settings", "hidePanel": "Hide Floating Window", "showPanel": "Show Floating Window", "quit": "Quit OffTick", "display": "Display", "language": "Language", "time": "Time", "date": "Date", "hour24": "24-hour", "hour12": "12-hour", "gregorian": "Gregorian", "lunar": "Lunar", "panelContent": "Floating Window", "countdown": "Clock-out Countdown", "earnedIncome": "Live Earnings", "dailyIncome": "Daily Income", "includePanelInScreenshots": "Include floating window in screenshots", "income": "Income", "monthlyIncome": "Monthly Income", "workdaysInMonth": "Workdays", "timer": "Timer", "workMode": "Mode", "fixedClockOut": "Fixed Clock-out", "unlockTimer": "Unlock Timer", "startTime": "Start Time", "clockOutTime": "Clock-out Time", "dailyHours": "Daily Hours", "done": "Done", "resetDefault": "Reset Defaults", "syncingTime": "Syncing network time...", "noPanelContent": "No floating content selected", "currentTime": "Current Time", "waitingIncome": "Income: waiting for network time", "waitingUnlock": "Waiting for first unlock after 5 AM", "clockOutNotificationTitle": "Time to clock out", "clockOutNotificationBody": "Nice work today. OffTick has counted down to your clock-out time.", "yuan": "CNY", "days": "days", "hoursUnit": "hours", "unlockRecords": "Unlock Records", "exportUnlockRecords": "Export Unlock Records", "exportUnlockRecordsHint": "Enter the export date range in yyyy-MM-dd format.", "exportStartDate": "Start Date", "exportEndDate": "End Date", "export": "Export", "cancel": "Cancel", "invalidDateRange": "Invalid Date Range", "dateRangeFormatHint": "Use yyyy-MM-dd and make sure the start date is not after the end date.", "noUnlockRecords": "No Unlock Records", "noUnlockRecordsHint": "No first unlock after 5 AM was recorded in the selected range.", "exportComplete": "Export Complete", "exportFailed": "Export Failed", "networkTimeUnavailable": "Network Time Unavailable", "networkTimeUnavailableHint": "OffTick could not sync network time. Connect to the internet and try exporting again."
+            "settings": "Settings", "hidePanel": "Hide Floating Window", "showPanel": "Show Floating Window", "quit": "Quit OffTick", "display": "Display", "language": "Language", "time": "Time", "date": "Date", "hour24": "24-hour", "hour12": "12-hour", "gregorian": "Gregorian", "lunar": "Lunar", "panelSize": "Window Size", "panelSizeSmall": "Small", "panelSizeMedium": "Medium", "panelSizeLarge": "Large", "panelContent": "Floating Window", "countdown": "Clock-out Countdown", "earnedIncome": "Live Earnings", "dailyIncome": "Daily Income", "includePanelInScreenshots": "Include floating window in screenshots", "income": "Income", "monthlyIncome": "Monthly Income", "workdaysInMonth": "Workdays", "timer": "Timer", "workMode": "Mode", "fixedClockOut": "Fixed Clock-out", "unlockTimer": "Unlock Timer", "startTime": "Start Time", "clockOutTime": "Clock-out Time", "dailyHours": "Daily Hours", "done": "Done", "resetDefault": "Reset Defaults", "syncingTime": "Syncing network time...", "noPanelContent": "No floating content selected", "currentTime": "Current Time", "waitingIncome": "Income: waiting for network time", "waitingUnlock": "Waiting for first unlock after 5 AM", "clockOutNotificationTitle": "Time to clock out", "clockOutNotificationBody": "Nice work today. OffTick has counted down to your clock-out time.", "yuan": "CNY", "days": "days", "hoursUnit": "hours", "unlockRecords": "Unlock Records", "exportUnlockRecords": "Export Unlock Records", "exportUnlockRecordsHint": "Enter the export date range in yyyy-MM-dd format.", "exportStartDate": "Start Date", "exportEndDate": "End Date", "export": "Export", "cancel": "Cancel", "invalidDateRange": "Invalid Date Range", "dateRangeFormatHint": "Use yyyy-MM-dd and make sure the start date is not after the end date.", "noUnlockRecords": "No Unlock Records", "noUnlockRecordsHint": "No first unlock after 5 AM was recorded in the selected range.", "exportComplete": "Export Complete", "exportFailed": "Export Failed", "networkTimeUnavailable": "Network Time Unavailable", "networkTimeUnavailableHint": "OffTick could not sync network time. Connect to the internet and try exporting again."
         ],
         .japanese: [
-            "settings": "設定", "hidePanel": "フローティングウィンドウを隠す", "showPanel": "フローティングウィンドウを表示", "quit": "OffTick を終了", "display": "表示", "language": "言語", "time": "時刻", "date": "日付", "hour24": "24時間", "hour12": "12時間", "gregorian": "西暦", "lunar": "旧暦", "panelContent": "表示内容", "countdown": "退勤カウントダウン", "earnedIncome": "本日のリアルタイム収入", "dailyIncome": "日収", "income": "収入", "monthlyIncome": "月収", "workdaysInMonth": "今月の出勤日", "timer": "タイマー", "workMode": "計算方式", "fixedClockOut": "固定退勤", "unlockTimer": "ロック解除計時", "startTime": "始業時刻", "clockOutTime": "退勤時刻", "dailyHours": "1日の勤務時間", "done": "完了", "resetDefault": "初期値に戻す", "syncingTime": "ネットワーク時刻を同期中...", "noPanelContent": "表示内容が選択されていません", "currentTime": "現在時刻", "waitingIncome": "収入：時刻同期待ち", "waitingUnlock": "今日5時以降の初回ロック解除待ち", "clockOutNotificationTitle": "退勤時間です", "clockOutNotificationBody": "今日もお疲れさまでした。OffTick が退勤時間を知らせます。", "yuan": "元", "days": "日", "hoursUnit": "時間"
+            "settings": "設定", "hidePanel": "フローティングウィンドウを隠す", "showPanel": "フローティングウィンドウを表示", "quit": "OffTick を終了", "display": "表示", "language": "言語", "time": "時刻", "date": "日付", "hour24": "24時間", "hour12": "12時間", "gregorian": "西暦", "lunar": "旧暦", "panelSize": "ウィンドウサイズ", "panelSizeSmall": "小", "panelSizeMedium": "中", "panelSizeLarge": "大", "panelContent": "表示内容", "countdown": "退勤カウントダウン", "earnedIncome": "本日のリアルタイム収入", "dailyIncome": "日収", "income": "収入", "monthlyIncome": "月収", "workdaysInMonth": "今月の出勤日", "timer": "タイマー", "workMode": "計算方式", "fixedClockOut": "固定退勤", "unlockTimer": "ロック解除計時", "startTime": "始業時刻", "clockOutTime": "退勤時刻", "dailyHours": "1日の勤務時間", "done": "完了", "resetDefault": "初期値に戻す", "syncingTime": "ネットワーク時刻を同期中...", "noPanelContent": "表示内容が選択されていません", "currentTime": "現在時刻", "waitingIncome": "収入：時刻同期待ち", "waitingUnlock": "今日5時以降の初回ロック解除待ち", "clockOutNotificationTitle": "退勤時間です", "clockOutNotificationBody": "今日もお疲れさまでした。OffTick が退勤時間を知らせます。", "yuan": "元", "days": "日", "hoursUnit": "時間"
         ],
         .korean: [
-            "settings": "설정", "hidePanel": "플로팅 창 숨기기", "showPanel": "플로팅 창 보기", "quit": "OffTick 종료", "display": "표시", "language": "언어", "time": "시간", "date": "날짜", "hour24": "24시간", "hour12": "12시간", "gregorian": "양력", "lunar": "음력", "panelContent": "플로팅 창 내용", "countdown": "퇴근 카운트다운", "earnedIncome": "오늘 실시간 수입", "dailyIncome": "일평균 수입", "income": "수입", "monthlyIncome": "월급", "workdaysInMonth": "이번 달 근무일", "timer": "타이머", "workMode": "계산 방식", "fixedClockOut": "고정 퇴근", "unlockTimer": "잠금 해제 기준", "startTime": "출근 시간", "clockOutTime": "퇴근 시간", "dailyHours": "하루 근무시간", "done": "완료", "resetDefault": "기본값 복원", "syncingTime": "네트워크 시간 동기화 중...", "noPanelContent": "선택된 표시 항목 없음", "currentTime": "현재 시간", "waitingIncome": "수입: 네트워크 시간 대기", "waitingUnlock": "오늘 5시 이후 첫 잠금 해제 대기", "clockOutNotificationTitle": "퇴근 시간입니다", "clockOutNotificationBody": "오늘도 수고했어요. OffTick 이 퇴근 시간을 알려드려요.", "yuan": "위안", "days": "일", "hoursUnit": "시간"
+            "settings": "설정", "hidePanel": "플로팅 창 숨기기", "showPanel": "플로팅 창 보기", "quit": "OffTick 종료", "display": "표시", "language": "언어", "time": "시간", "date": "날짜", "hour24": "24시간", "hour12": "12시간", "gregorian": "양력", "lunar": "음력", "panelSize": "창 크기", "panelSizeSmall": "작게", "panelSizeMedium": "중간", "panelSizeLarge": "크게", "panelContent": "플로팅 창 내용", "countdown": "퇴근 카운트다운", "earnedIncome": "오늘 실시간 수입", "dailyIncome": "일평균 수입", "income": "수입", "monthlyIncome": "월급", "workdaysInMonth": "이번 달 근무일", "timer": "타이머", "workMode": "계산 방식", "fixedClockOut": "고정 퇴근", "unlockTimer": "잠금 해제 기준", "startTime": "출근 시간", "clockOutTime": "퇴근 시간", "dailyHours": "하루 근무시간", "done": "완료", "resetDefault": "기본값 복원", "syncingTime": "네트워크 시간 동기화 중...", "noPanelContent": "선택된 표시 항목 없음", "currentTime": "현재 시간", "waitingIncome": "수입: 네트워크 시간 대기", "waitingUnlock": "오늘 5시 이후 첫 잠금 해제 대기", "clockOutNotificationTitle": "퇴근 시간입니다", "clockOutNotificationBody": "오늘도 수고했어요. OffTick 이 퇴근 시간을 알려드려요.", "yuan": "위안", "days": "일", "hoursUnit": "시간"
         ],
         .spanish: [
-            "settings": "Ajustes", "hidePanel": "Ocultar ventana flotante", "showPanel": "Mostrar ventana flotante", "quit": "Salir de OffTick", "display": "Visualización", "language": "Idioma", "time": "Hora", "date": "Fecha", "hour24": "24 h", "hour12": "12 h", "gregorian": "Gregoriano", "lunar": "Lunar", "panelContent": "Contenido flotante", "countdown": "Cuenta atrás", "earnedIncome": "Ingresos en vivo", "dailyIncome": "Ingreso diario", "income": "Ingresos", "monthlyIncome": "Salario mensual", "workdaysInMonth": "Días laborables", "timer": "Temporizador", "workMode": "Modo", "fixedClockOut": "Salida fija", "unlockTimer": "Desde desbloqueo", "startTime": "Entrada", "clockOutTime": "Salida", "dailyHours": "Horas diarias", "done": "Listo", "resetDefault": "Restablecer", "syncingTime": "Sincronizando hora...", "noPanelContent": "Sin contenido seleccionado", "currentTime": "Hora actual", "waitingIncome": "Ingresos: esperando hora de red", "waitingUnlock": "Esperando el primer desbloqueo después de las 5", "clockOutNotificationTitle": "Hora de salir", "clockOutNotificationBody": "Buen trabajo hoy. OffTick llegó a tu hora de salida.", "yuan": "CNY", "days": "días", "hoursUnit": "horas"
+            "settings": "Ajustes", "hidePanel": "Ocultar ventana flotante", "showPanel": "Mostrar ventana flotante", "quit": "Salir de OffTick", "display": "Visualización", "language": "Idioma", "time": "Hora", "date": "Fecha", "hour24": "24 h", "hour12": "12 h", "gregorian": "Gregoriano", "lunar": "Lunar", "panelSize": "Tamaño", "panelSizeSmall": "Pequeño", "panelSizeMedium": "Mediano", "panelSizeLarge": "Grande", "panelContent": "Contenido flotante", "countdown": "Cuenta atrás", "earnedIncome": "Ingresos en vivo", "dailyIncome": "Ingreso diario", "income": "Ingresos", "monthlyIncome": "Salario mensual", "workdaysInMonth": "Días laborables", "timer": "Temporizador", "workMode": "Modo", "fixedClockOut": "Salida fija", "unlockTimer": "Desde desbloqueo", "startTime": "Entrada", "clockOutTime": "Salida", "dailyHours": "Horas diarias", "done": "Listo", "resetDefault": "Restablecer", "syncingTime": "Sincronizando hora...", "noPanelContent": "Sin contenido seleccionado", "currentTime": "Hora actual", "waitingIncome": "Ingresos: esperando hora de red", "waitingUnlock": "Esperando el primer desbloqueo después de las 5", "clockOutNotificationTitle": "Hora de salir", "clockOutNotificationBody": "Buen trabajo hoy. OffTick llegó a tu hora de salida.", "yuan": "CNY", "days": "días", "hoursUnit": "horas"
         ],
         .french: [
-            "settings": "Réglages", "hidePanel": "Masquer la fenêtre flottante", "showPanel": "Afficher la fenêtre flottante", "quit": "Quitter OffTick", "display": "Affichage", "language": "Langue", "time": "Heure", "date": "Date", "hour24": "24 h", "hour12": "12 h", "gregorian": "Grégorien", "lunar": "Lunaire", "panelContent": "Contenu flottant", "countdown": "Compte à rebours", "earnedIncome": "Revenu en direct", "dailyIncome": "Revenu journalier", "income": "Revenu", "monthlyIncome": "Salaire mensuel", "workdaysInMonth": "Jours ouvrés", "timer": "Minuteur", "workMode": "Mode", "fixedClockOut": "Fin fixe", "unlockTimer": "Depuis déverrouillage", "startTime": "Début", "clockOutTime": "Fin", "dailyHours": "Heures/jour", "done": "Terminé", "resetDefault": "Réinitialiser", "syncingTime": "Synchronisation de l’heure...", "noPanelContent": "Aucun contenu sélectionné", "currentTime": "Heure actuelle", "waitingIncome": "Revenu : attente de l’heure réseau", "waitingUnlock": "En attente du premier déverrouillage après 5 h", "clockOutNotificationTitle": "C’est l’heure de partir", "clockOutNotificationBody": "Beau travail aujourd’hui. OffTick a atteint l’heure de fin.", "yuan": "CNY", "days": "jours", "hoursUnit": "heures"
+            "settings": "Réglages", "hidePanel": "Masquer la fenêtre flottante", "showPanel": "Afficher la fenêtre flottante", "quit": "Quitter OffTick", "display": "Affichage", "language": "Langue", "time": "Heure", "date": "Date", "hour24": "24 h", "hour12": "12 h", "gregorian": "Grégorien", "lunar": "Lunaire", "panelSize": "Taille", "panelSizeSmall": "Petit", "panelSizeMedium": "Moyen", "panelSizeLarge": "Grand", "panelContent": "Contenu flottant", "countdown": "Compte à rebours", "earnedIncome": "Revenu en direct", "dailyIncome": "Revenu journalier", "income": "Revenu", "monthlyIncome": "Salaire mensuel", "workdaysInMonth": "Jours ouvrés", "timer": "Minuteur", "workMode": "Mode", "fixedClockOut": "Fin fixe", "unlockTimer": "Depuis déverrouillage", "startTime": "Début", "clockOutTime": "Fin", "dailyHours": "Heures/jour", "done": "Terminé", "resetDefault": "Réinitialiser", "syncingTime": "Synchronisation de l’heure...", "noPanelContent": "Aucun contenu sélectionné", "currentTime": "Heure actuelle", "waitingIncome": "Revenu : attente de l’heure réseau", "waitingUnlock": "En attente du premier déverrouillage après 5 h", "clockOutNotificationTitle": "C’est l’heure de partir", "clockOutNotificationBody": "Beau travail aujourd’hui. OffTick a atteint l’heure de fin.", "yuan": "CNY", "days": "jours", "hoursUnit": "heures"
         ],
         .german: [
-            "settings": "Einstellungen", "hidePanel": "Schwebefenster ausblenden", "showPanel": "Schwebefenster anzeigen", "quit": "OffTick beenden", "display": "Anzeige", "language": "Sprache", "time": "Zeit", "date": "Datum", "hour24": "24 Std.", "hour12": "12 Std.", "gregorian": "Gregorianisch", "lunar": "Mondkalender", "panelContent": "Schwebefenster", "countdown": "Feierabend-Countdown", "earnedIncome": "Live-Einkommen", "dailyIncome": "Tageseinkommen", "income": "Einkommen", "monthlyIncome": "Monatsgehalt", "workdaysInMonth": "Arbeitstage", "timer": "Timer", "workMode": "Modus", "fixedClockOut": "Feste Endzeit", "unlockTimer": "Ab Entsperren", "startTime": "Startzeit", "clockOutTime": "Endzeit", "dailyHours": "Stunden/Tag", "done": "Fertig", "resetDefault": "Zurücksetzen", "syncingTime": "Netzwerkzeit wird synchronisiert...", "noPanelContent": "Kein Inhalt ausgewählt", "currentTime": "Aktuelle Zeit", "waitingIncome": "Einkommen: warte auf Netzwerkzeit", "waitingUnlock": "Warte auf erstes Entsperren nach 5 Uhr", "clockOutNotificationTitle": "Feierabend", "clockOutNotificationBody": "Gute Arbeit heute. OffTick hat bis zum Feierabend gezählt.", "yuan": "CNY", "days": "Tage", "hoursUnit": "Stunden"
+            "settings": "Einstellungen", "hidePanel": "Schwebefenster ausblenden", "showPanel": "Schwebefenster anzeigen", "quit": "OffTick beenden", "display": "Anzeige", "language": "Sprache", "time": "Zeit", "date": "Datum", "hour24": "24 Std.", "hour12": "12 Std.", "gregorian": "Gregorianisch", "lunar": "Mondkalender", "panelSize": "Fenstergröße", "panelSizeSmall": "Klein", "panelSizeMedium": "Mittel", "panelSizeLarge": "Groß", "panelContent": "Schwebefenster", "countdown": "Feierabend-Countdown", "earnedIncome": "Live-Einkommen", "dailyIncome": "Tageseinkommen", "income": "Einkommen", "monthlyIncome": "Monatsgehalt", "workdaysInMonth": "Arbeitstage", "timer": "Timer", "workMode": "Modus", "fixedClockOut": "Feste Endzeit", "unlockTimer": "Ab Entsperren", "startTime": "Startzeit", "clockOutTime": "Endzeit", "dailyHours": "Stunden/Tag", "done": "Fertig", "resetDefault": "Zurücksetzen", "syncingTime": "Netzwerkzeit wird synchronisiert...", "noPanelContent": "Kein Inhalt ausgewählt", "currentTime": "Aktuelle Zeit", "waitingIncome": "Einkommen: warte auf Netzwerkzeit", "waitingUnlock": "Warte auf erstes Entsperren nach 5 Uhr", "clockOutNotificationTitle": "Feierabend", "clockOutNotificationBody": "Gute Arbeit heute. OffTick hat bis zum Feierabend gezählt.", "yuan": "CNY", "days": "Tage", "hoursUnit": "Stunden"
         ],
         .portuguese: [
-            "settings": "Ajustes", "hidePanel": "Ocultar janela flutuante", "showPanel": "Mostrar janela flutuante", "quit": "Sair do OffTick", "display": "Exibição", "language": "Idioma", "time": "Hora", "date": "Data", "hour24": "24 h", "hour12": "12 h", "gregorian": "Gregoriano", "lunar": "Lunar", "panelContent": "Conteúdo flutuante", "countdown": "Contagem para sair", "earnedIncome": "Ganhos ao vivo", "dailyIncome": "Renda diária", "income": "Renda", "monthlyIncome": "Salário mensal", "workdaysInMonth": "Dias úteis", "timer": "Timer", "workMode": "Modo", "fixedClockOut": "Saída fixa", "unlockTimer": "Desde desbloqueio", "startTime": "Início", "clockOutTime": "Saída", "dailyHours": "Horas diárias", "done": "Concluir", "resetDefault": "Restaurar", "syncingTime": "Sincronizando horário...", "noPanelContent": "Nenhum conteúdo selecionado", "currentTime": "Hora atual", "waitingIncome": "Renda: aguardando horário de rede", "waitingUnlock": "Aguardando primeiro desbloqueio após 5h", "clockOutNotificationTitle": "Hora de sair", "clockOutNotificationBody": "Bom trabalho hoje. OffTick chegou ao horário de saída.", "yuan": "CNY", "days": "dias", "hoursUnit": "horas"
+            "settings": "Ajustes", "hidePanel": "Ocultar janela flutuante", "showPanel": "Mostrar janela flutuante", "quit": "Sair do OffTick", "display": "Exibição", "language": "Idioma", "time": "Hora", "date": "Data", "hour24": "24 h", "hour12": "12 h", "gregorian": "Gregoriano", "lunar": "Lunar", "panelSize": "Tamanho", "panelSizeSmall": "Pequeno", "panelSizeMedium": "Médio", "panelSizeLarge": "Grande", "panelContent": "Conteúdo flutuante", "countdown": "Contagem para sair", "earnedIncome": "Ganhos ao vivo", "dailyIncome": "Renda diária", "income": "Renda", "monthlyIncome": "Salário mensal", "workdaysInMonth": "Dias úteis", "timer": "Timer", "workMode": "Modo", "fixedClockOut": "Saída fixa", "unlockTimer": "Desde desbloqueio", "startTime": "Início", "clockOutTime": "Saída", "dailyHours": "Horas diárias", "done": "Concluir", "resetDefault": "Restaurar", "syncingTime": "Sincronizando horário...", "noPanelContent": "Nenhum conteúdo selecionado", "currentTime": "Hora atual", "waitingIncome": "Renda: aguardando horário de rede", "waitingUnlock": "Aguardando primeiro desbloqueio após 5h", "clockOutNotificationTitle": "Hora de sair", "clockOutNotificationBody": "Bom trabalho hoje. OffTick chegou ao horário de saída.", "yuan": "CNY", "days": "dias", "hoursUnit": "horas"
         ],
         .russian: [
-            "settings": "Настройки", "hidePanel": "Скрыть плавающее окно", "showPanel": "Показать плавающее окно", "quit": "Выйти из OffTick", "display": "Отображение", "language": "Язык", "time": "Время", "date": "Дата", "hour24": "24 часа", "hour12": "12 часов", "gregorian": "Григорианский", "lunar": "Лунный", "panelContent": "Содержимое окна", "countdown": "До конца работы", "earnedIncome": "Доход сейчас", "dailyIncome": "Доход в день", "income": "Доход", "monthlyIncome": "Месячный доход", "workdaysInMonth": "Рабочие дни", "timer": "Таймер", "workMode": "Режим", "fixedClockOut": "Фикс. конец", "unlockTimer": "От разблокировки", "startTime": "Начало", "clockOutTime": "Конец", "dailyHours": "Часов в день", "done": "Готово", "resetDefault": "Сбросить", "syncingTime": "Синхронизация времени...", "noPanelContent": "Ничего не выбрано", "currentTime": "Текущее время", "waitingIncome": "Доход: ожидание сетевого времени", "waitingUnlock": "Ожидание первой разблокировки после 5:00", "clockOutNotificationTitle": "Пора заканчивать", "clockOutNotificationBody": "Отличная работа сегодня. OffTick досчитал до конца рабочего дня.", "yuan": "CNY", "days": "дн.", "hoursUnit": "ч"
+            "settings": "Настройки", "hidePanel": "Скрыть плавающее окно", "showPanel": "Показать плавающее окно", "quit": "Выйти из OffTick", "display": "Отображение", "language": "Язык", "time": "Время", "date": "Дата", "hour24": "24 часа", "hour12": "12 часов", "gregorian": "Григорианский", "lunar": "Лунный", "panelSize": "Размер окна", "panelSizeSmall": "Малый", "panelSizeMedium": "Средний", "panelSizeLarge": "Большой", "panelContent": "Содержимое окна", "countdown": "До конца работы", "earnedIncome": "Доход сейчас", "dailyIncome": "Доход в день", "income": "Доход", "monthlyIncome": "Месячный доход", "workdaysInMonth": "Рабочие дни", "timer": "Таймер", "workMode": "Режим", "fixedClockOut": "Фикс. конец", "unlockTimer": "От разблокировки", "startTime": "Начало", "clockOutTime": "Конец", "dailyHours": "Часов в день", "done": "Готово", "resetDefault": "Сбросить", "syncingTime": "Синхронизация времени...", "noPanelContent": "Ничего не выбрано", "currentTime": "Текущее время", "waitingIncome": "Доход: ожидание сетевого времени", "waitingUnlock": "Ожидание первой разблокировки после 5:00", "clockOutNotificationTitle": "Пора заканчивать", "clockOutNotificationBody": "Отличная работа сегодня. OffTick досчитал до конца рабочего дня.", "yuan": "CNY", "days": "дн.", "hoursUnit": "ч"
         ]
     ]
 }
@@ -1470,6 +1735,7 @@ struct WorkSettings {
     var mode: ClockOutMode
     var timeFormat: TimeFormatMode
     var calendarMode: CalendarMode
+    var panelSize: PanelSizeMode
     var language: AppLanguage
     var showDateInPanel: Bool
     var showTimeInPanel: Bool
@@ -1494,6 +1760,7 @@ struct WorkSettings {
             mode: .unlockTimer,
             timeFormat: .twentyFourHour,
             calendarMode: .gregorian,
+            panelSize: .medium,
             language: .simplifiedChinese,
             showDateInPanel: true,
             showTimeInPanel: true,
@@ -1531,6 +1798,7 @@ struct WorkSettings {
             mode: ClockOutMode(storageValue: defaults.string(forKey: ClockOutMode.storageKey) ?? fallback.mode.storageValue),
             timeFormat: TimeFormatMode(storageValue: defaults.string(forKey: TimeFormatMode.storageKey) ?? fallback.timeFormat.storageValue),
             calendarMode: CalendarMode(storageValue: defaults.string(forKey: CalendarMode.storageKey) ?? fallback.calendarMode.storageValue),
+            panelSize: PanelSizeMode(storageValue: defaults.string(forKey: PanelSizeMode.storageKey) ?? fallback.panelSize.storageValue),
             language: AppLanguage(storageValue: defaults.string(forKey: AppLanguage.storageKey) ?? fallback.language.storageValue),
             showDateInPanel: defaults.object(forKey: "showDateInPanel").map { _ in defaults.bool(forKey: "showDateInPanel") } ?? fallback.showDateInPanel,
             showTimeInPanel: defaults.object(forKey: "showTimeInPanel").map { _ in defaults.bool(forKey: "showTimeInPanel") } ?? fallback.showTimeInPanel,
@@ -1559,6 +1827,7 @@ struct WorkSettings {
             ClockOutMode.storageKey,
             TimeFormatMode.storageKey,
             CalendarMode.storageKey,
+            PanelSizeMode.storageKey,
             AppLanguage.storageKey,
             "showDateInPanel",
             "showTimeInPanel",
@@ -1602,6 +1871,7 @@ struct WorkSettings {
         defaults.set(sanitized.mode.storageValue, forKey: ClockOutMode.storageKey)
         defaults.set(sanitized.timeFormat.storageValue, forKey: TimeFormatMode.storageKey)
         defaults.set(sanitized.calendarMode.storageValue, forKey: CalendarMode.storageKey)
+        defaults.set(sanitized.panelSize.storageValue, forKey: PanelSizeMode.storageKey)
         defaults.set(sanitized.language.storageValue, forKey: AppLanguage.storageKey)
         defaults.set(sanitized.showDateInPanel, forKey: "showDateInPanel")
         defaults.set(sanitized.showTimeInPanel, forKey: "showTimeInPanel")
@@ -1623,6 +1893,7 @@ struct WorkSettings {
             mode: mode,
             timeFormat: timeFormat,
             calendarMode: calendarMode,
+            panelSize: panelSize,
             language: language,
             showDateInPanel: showDateInPanel,
             showTimeInPanel: showTimeInPanel,
