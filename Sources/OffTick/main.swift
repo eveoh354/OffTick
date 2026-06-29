@@ -382,7 +382,7 @@ final class OffTickApp: NSObject, NSApplicationDelegate {
 
     private func renderSettings() {
         clearStack()
-        panel.setContentSize(NSSize(width: 340, height: 746))
+        panel.setContentSize(NSSize(width: 340, height: 778))
 
         let title = makeLabel(t("settings"), size: 18, weight: .semibold)
         stackView.addArrangedSubview(title)
@@ -425,7 +425,8 @@ final class OffTickApp: NSObject, NSApplicationDelegate {
         stackView.addArrangedSubview(launchAtLoginCheckbox)
 
         stackView.addArrangedSubview(makeSeparator())
-        stackView.addArrangedSubview(makeSectionTitle(t("watermarkFormat")))
+        stackView.addArrangedSubview(makeSectionTitle(t("exportSettings")))
+        stackView.addArrangedSubview(makeRow(label: t("exportLocation"), control: makeExportLocationControl(), suffix: nil))
         stackView.addArrangedSubview(makeCheckbox(title: t("watermarkIncludeDate"), isOn: settings.includeDateInExportWatermark, action: #selector(watermarkFormatChanged(_:)), tag: WatermarkField.date.rawValue))
         stackView.addArrangedSubview(makeCheckbox(title: t("watermarkIncludeDevice"), isOn: settings.includeDeviceInExportWatermark, action: #selector(watermarkFormatChanged(_:)), tag: WatermarkField.device.rawValue))
 
@@ -567,11 +568,15 @@ final class OffTickApp: NSObject, NSApplicationDelegate {
         let savePanel = NSSavePanel()
         savePanel.allowedContentTypes = [.pdf]
         savePanel.canCreateDirectories = true
+        savePanel.directoryURL = settings.resolvedExportDirectoryURL
         savePanel.nameFieldStringValue = "OffTick-Unlock-Records-\(WorkSessionClock.dateKey(startDate))-\(WorkSessionClock.dateKey(endDate)).pdf"
 
         guard savePanel.runModal() == .OK, let url = savePanel.url else {
             return
         }
+
+        settings.exportDirectoryPath = url.deletingLastPathComponent().path
+        settings.save()
 
         do {
             try UnlockRecordsPDFExporter.write(records: records, from: startDate, to: endOfDay, settings: settings, generatedAt: timeProvider.now, to: url)
@@ -810,6 +815,38 @@ final class OffTickApp: NSObject, NSApplicationDelegate {
         popUp.translatesAutoresizingMaskIntoConstraints = false
         popUp.widthAnchor.constraint(equalToConstant: 170).isActive = true
         return popUp
+    }
+
+    private func makeExportLocationControl() -> NSStackView {
+        let control = NSStackView()
+        control.orientation = .horizontal
+        control.alignment = .centerY
+        control.spacing = 6
+
+        let chooseButton = NSButton(title: exportLocationButtonTitle(), target: self, action: #selector(chooseExportLocation))
+        chooseButton.bezelStyle = .rounded
+        chooseButton.controlSize = .small
+        chooseButton.lineBreakMode = .byTruncatingMiddle
+        chooseButton.toolTip = settings.exportDirectoryPath ?? t("askEveryExport")
+        chooseButton.translatesAutoresizingMaskIntoConstraints = false
+        chooseButton.widthAnchor.constraint(equalToConstant: 122).isActive = true
+
+        let clearButton = NSButton(title: t("clear"), target: self, action: #selector(clearExportLocation))
+        clearButton.bezelStyle = .rounded
+        clearButton.controlSize = .small
+        clearButton.isEnabled = settings.exportDirectoryPath != nil
+
+        control.addArrangedSubview(chooseButton)
+        control.addArrangedSubview(clearButton)
+        return control
+    }
+
+    private func exportLocationButtonTitle() -> String {
+        guard let path = settings.exportDirectoryPath, !path.isEmpty else {
+            return t("askEveryExport")
+        }
+
+        return URL(fileURLWithPath: path).lastPathComponent
     }
 
     private func makeCurrencyPopUp() -> NSPopUpButton {
@@ -1103,6 +1140,31 @@ final class OffTickApp: NSObject, NSApplicationDelegate {
         settings.includePanelInScreenshots = sender.state == .on
         settings.save()
         applyPanelScreenshotSharing()
+    }
+
+    @objc private func chooseExportLocation() {
+        let openPanel = NSOpenPanel()
+        openPanel.canChooseFiles = false
+        openPanel.canChooseDirectories = true
+        openPanel.canCreateDirectories = true
+        openPanel.allowsMultipleSelection = false
+        openPanel.prompt = t("choose")
+        openPanel.message = t("chooseExportLocationHint")
+        openPanel.directoryURL = settings.resolvedExportDirectoryURL
+
+        guard openPanel.runModal() == .OK, let url = openPanel.url else {
+            return
+        }
+
+        settings.exportDirectoryPath = url.path
+        settings.save()
+        renderSettings()
+    }
+
+    @objc private func clearExportLocation() {
+        settings.exportDirectoryPath = nil
+        settings.save()
+        renderSettings()
     }
 
     private func applyPanelScreenshotSharing() {
@@ -1701,14 +1763,52 @@ enum AppLanguage: Int, CaseIterable {
         }
     }
 
+    static var systemDefault: AppLanguage {
+        for identifier in Locale.preferredLanguages {
+            let normalized = identifier.replacingOccurrences(of: "_", with: "-").lowercased()
+            if normalized.hasPrefix("zh-hant") || normalized.hasPrefix("zh-tw") || normalized.hasPrefix("zh-hk") || normalized.hasPrefix("zh-mo") {
+                return .traditionalChinese
+            }
+            if normalized.hasPrefix("zh") {
+                return .simplifiedChinese
+            }
+            if normalized.hasPrefix("ja") {
+                return .japanese
+            }
+            if normalized.hasPrefix("ko") {
+                return .korean
+            }
+            if normalized.hasPrefix("es") {
+                return .spanish
+            }
+            if normalized.hasPrefix("fr") {
+                return .french
+            }
+            if normalized.hasPrefix("de") {
+                return .german
+            }
+            if normalized.hasPrefix("pt") {
+                return .portuguese
+            }
+            if normalized.hasPrefix("ru") {
+                return .russian
+            }
+            if normalized.hasPrefix("en") {
+                return .english
+            }
+        }
+
+        return .english
+    }
+
     init(storageValue: String) {
-        self = AppLanguage.allCases.first { $0.storageValue == storageValue } ?? .simplifiedChinese
+        self = AppLanguage.allCases.first { $0.storageValue == storageValue } ?? .systemDefault
     }
 }
 
 enum L10n {
     static func text(_ key: String, language: AppLanguage) -> String {
-        translations[language]?[key] ?? translations[.simplifiedChinese]?[key] ?? key
+        translations[language]?[key] ?? translations[.english]?[key] ?? translations[.simplifiedChinese]?[key] ?? key
     }
 
     private static let translations: [AppLanguage: [String: String]] = [
@@ -1732,6 +1832,12 @@ enum L10n {
             "panelContent": "悬浮窗内容",
             "options": "选项",
             "watermarkFormat": "水印格式",
+            "exportSettings": "导出设置",
+            "exportLocation": "导出位置",
+            "askEveryExport": "每次选择",
+            "chooseExportLocationHint": "选择解锁记录 PDF 默认导出文件夹。导出时仍可在保存面板中临时更改位置。",
+            "choose": "选择",
+            "clear": "清除",
             "countdown": "下班倒计时",
             "earnedIncome": "今日实时收入",
             "dailyIncome": "日均收入",
@@ -1794,7 +1900,7 @@ enum L10n {
             "settings": "設定", "hidePanel": "隱藏懸浮窗", "showPanel": "顯示懸浮窗", "quit": "退出 OffTick", "display": "顯示", "language": "語言", "time": "時間", "date": "日期", "hour24": "24小時", "hour12": "12小時", "gregorian": "國曆", "lunar": "農曆", "panelSize": "懸浮窗大小", "panelSizeSmall": "小", "panelSizeMedium": "中", "panelSizeLarge": "大", "panelContent": "懸浮窗內容", "options": "選項", "watermarkFormat": "浮水印格式", "countdown": "下班倒數", "earnedIncome": "今日即時收入", "dailyIncome": "日均收入", "includePanelInScreenshots": "截圖時包含懸浮窗", "launchAtLogin": "開機自動啟動", "watermarkIncludeDate": "浮水印包含匯出時間", "watermarkIncludeDevice": "浮水印包含設備序號", "updates": "更新", "checkForUpdates": "檢查更新", "checkingForUpdates": "正在檢查更新...", "openReleasesPage": "開啟發布頁面", "updateAvailable": "發現新版本", "noUpdateAvailable": "已是最新版本", "noUpdateAvailableHint": "目前版本已經是最新版本。", "updateCheckFailed": "檢查更新失敗", "updateCheckFailedHint": "暫時無法檢查更新。你可以稍後再試，或從選單開啟 GitHub 發布頁面手動查看。", "income": "收入", "monthlyIncome": "月薪", "currencyUnit": "貨幣單位", "workdaysInMonth": "本月工作日", "timer": "計時", "workMode": "計算方式", "fixedClockOut": "固定下班", "unlockTimer": "解鎖計時", "startTime": "上班時間", "clockOutTime": "下班時間", "dailyHours": "每日時長", "done": "完成", "resetDefault": "恢復預設", "syncingTime": "正在校準網路時間...", "noPanelContent": "未選擇懸浮窗內容", "currentTime": "目前時間", "waitingIncome": "收入：等待網路時間", "waitingUnlock": "等待今日5點後首次解鎖", "clockOutNotificationTitle": "下班啦", "clockOutNotificationBody": "今天辛苦了，OffTick 已經幫你數到下班時間。", "yuan": "元", "days": "天", "hoursUnit": "小時", "unlockRecords": "解鎖記錄", "exportUnlockRecords": "匯出解鎖記錄", "exportUnlockRecordsHint": "請輸入匯出的日期範圍，格式為 yyyy-MM-dd。", "exportStartDate": "開始日期", "exportEndDate": "結束日期", "export": "匯出", "cancel": "取消", "invalidDateRange": "日期範圍無效", "dateRangeFormatHint": "請使用 yyyy-MM-dd 格式，並確保開始日期不晚於結束日期。", "noUnlockRecords": "沒有解鎖記錄", "noUnlockRecordsHint": "所選範圍內沒有記錄到 5 點後的首次解鎖時間。", "exportComplete": "匯出完成", "exportFailed": "匯出失敗", "networkTimeUnavailable": "網路時間不可用", "networkTimeUnavailableHint": "OffTick 暫時無法校準網路時間，請連網後再匯出。", "launchAtLoginFailed": "開機自動啟動設定失敗", "launchAtLoginApprovalRequired": "需要系統確認", "launchAtLoginApprovalRequiredHint": "請在「系統設定 > 一般 > 登入項目」允許 OffTick 後，開機自動啟動才會生效。"
         ],
         .english: [
-            "settings": "Settings", "hidePanel": "Hide Floating Window", "showPanel": "Show Floating Window", "quit": "Quit OffTick", "display": "Display", "language": "Language", "time": "Time", "date": "Date", "hour24": "24-hour", "hour12": "12-hour", "gregorian": "Gregorian", "lunar": "Lunar", "panelSize": "Window Size", "panelSizeSmall": "Small", "panelSizeMedium": "Medium", "panelSizeLarge": "Large", "panelContent": "Floating Window", "options": "Options", "watermarkFormat": "Watermark", "countdown": "Clock-out Countdown", "earnedIncome": "Live Earnings", "dailyIncome": "Daily Income", "includePanelInScreenshots": "Include floating window in screenshots", "launchAtLogin": "Launch at login", "watermarkIncludeDate": "Include export time", "watermarkIncludeDevice": "Include device ID", "updates": "Updates", "checkForUpdates": "Check for Updates", "checkingForUpdates": "Checking for updates...", "openReleasesPage": "Open Releases Page", "updateAvailable": "Update Available", "noUpdateAvailable": "You are up to date", "noUpdateAvailableHint": "You are already using the latest version.", "updateCheckFailed": "Update Check Failed", "updateCheckFailedHint": "Unable to check for updates right now. Try again later, or open the GitHub Releases page from the menu.", "income": "Income", "monthlyIncome": "Monthly Income", "currencyUnit": "Currency", "workdaysInMonth": "Workdays", "timer": "Timer", "workMode": "Mode", "fixedClockOut": "Fixed Clock-out", "unlockTimer": "Unlock Timer", "startTime": "Start Time", "clockOutTime": "Clock-out Time", "dailyHours": "Daily Hours", "done": "Done", "resetDefault": "Reset Defaults", "syncingTime": "Syncing network time...", "noPanelContent": "No floating content selected", "currentTime": "Current Time", "waitingIncome": "Income: waiting for network time", "waitingUnlock": "Waiting for first unlock after 5 AM", "clockOutNotificationTitle": "Time to clock out", "clockOutNotificationBody": "Nice work today. OffTick has counted down to your clock-out time.", "yuan": "CNY", "days": "days", "hoursUnit": "hours", "unlockRecords": "Unlock Records", "exportUnlockRecords": "Export Unlock Records", "exportUnlockRecordsHint": "Enter the export date range in yyyy-MM-dd format.", "exportStartDate": "Start Date", "exportEndDate": "End Date", "export": "Export", "cancel": "Cancel", "invalidDateRange": "Invalid Date Range", "dateRangeFormatHint": "Use yyyy-MM-dd and make sure the start date is not after the end date.", "noUnlockRecords": "No Unlock Records", "noUnlockRecordsHint": "No first unlock after 5 AM was recorded in the selected range.", "exportComplete": "Export Complete", "exportFailed": "Export Failed", "networkTimeUnavailable": "Network Time Unavailable", "networkTimeUnavailableHint": "OffTick could not sync network time. Connect to the internet and try exporting again.", "launchAtLoginFailed": "Could not update launch at login", "launchAtLoginApprovalRequired": "Approval Required", "launchAtLoginApprovalRequiredHint": "Allow OffTick in System Settings > General > Login Items before launch at login takes effect."
+            "settings": "Settings", "hidePanel": "Hide Floating Window", "showPanel": "Show Floating Window", "quit": "Quit OffTick", "display": "Display", "language": "Language", "time": "Time", "date": "Date", "hour24": "24-hour", "hour12": "12-hour", "gregorian": "Gregorian", "lunar": "Lunar", "panelSize": "Window Size", "panelSizeSmall": "Small", "panelSizeMedium": "Medium", "panelSizeLarge": "Large", "panelContent": "Floating Window", "options": "Options", "watermarkFormat": "Watermark", "exportSettings": "Export", "exportLocation": "Location", "askEveryExport": "Choose each time", "chooseExportLocationHint": "Choose the default folder for unlock record PDFs. You can still change the location in the save panel when exporting.", "choose": "Choose", "clear": "Clear", "countdown": "Clock-out Countdown", "earnedIncome": "Live Earnings", "dailyIncome": "Daily Income", "includePanelInScreenshots": "Include floating window in screenshots", "launchAtLogin": "Launch at login", "watermarkIncludeDate": "Include export time", "watermarkIncludeDevice": "Include device ID", "updates": "Updates", "checkForUpdates": "Check for Updates", "checkingForUpdates": "Checking for updates...", "openReleasesPage": "Open Releases Page", "updateAvailable": "Update Available", "noUpdateAvailable": "You are up to date", "noUpdateAvailableHint": "You are already using the latest version.", "updateCheckFailed": "Update Check Failed", "updateCheckFailedHint": "Unable to check for updates right now. Try again later, or open the GitHub Releases page from the menu.", "income": "Income", "monthlyIncome": "Monthly Income", "currencyUnit": "Currency", "workdaysInMonth": "Workdays", "timer": "Timer", "workMode": "Mode", "fixedClockOut": "Fixed Clock-out", "unlockTimer": "Unlock Timer", "startTime": "Start Time", "clockOutTime": "Clock-out Time", "dailyHours": "Daily Hours", "done": "Done", "resetDefault": "Reset Defaults", "syncingTime": "Syncing network time...", "noPanelContent": "No floating content selected", "currentTime": "Current Time", "waitingIncome": "Income: waiting for network time", "waitingUnlock": "Waiting for first unlock after 5 AM", "clockOutNotificationTitle": "Time to clock out", "clockOutNotificationBody": "Nice work today. OffTick has counted down to your clock-out time.", "yuan": "CNY", "days": "days", "hoursUnit": "hours", "unlockRecords": "Unlock Records", "exportUnlockRecords": "Export Unlock Records", "exportUnlockRecordsHint": "Enter the export date range in yyyy-MM-dd format.", "exportStartDate": "Start Date", "exportEndDate": "End Date", "export": "Export", "cancel": "Cancel", "invalidDateRange": "Invalid Date Range", "dateRangeFormatHint": "Use yyyy-MM-dd and make sure the start date is not after the end date.", "noUnlockRecords": "No Unlock Records", "noUnlockRecordsHint": "No first unlock after 5 AM was recorded in the selected range.", "exportComplete": "Export Complete", "exportFailed": "Export Failed", "networkTimeUnavailable": "Network Time Unavailable", "networkTimeUnavailableHint": "OffTick could not sync network time. Connect to the internet and try exporting again.", "launchAtLoginFailed": "Could not update launch at login", "launchAtLoginApprovalRequired": "Approval Required", "launchAtLoginApprovalRequiredHint": "Allow OffTick in System Settings > General > Login Items before launch at login takes effect."
         ],
         .japanese: [
             "settings": "設定", "hidePanel": "フローティングウィンドウを隠す", "showPanel": "フローティングウィンドウを表示", "quit": "OffTick を終了", "display": "表示", "language": "言語", "time": "時刻", "date": "日付", "hour24": "24時間", "hour12": "12時間", "gregorian": "西暦", "lunar": "旧暦", "panelSize": "ウィンドウサイズ", "panelSizeSmall": "小", "panelSizeMedium": "中", "panelSizeLarge": "大", "panelContent": "表示内容", "options": "オプション", "watermarkFormat": "透かし形式", "countdown": "退勤カウントダウン", "earnedIncome": "本日のリアルタイム収入", "dailyIncome": "日収", "includePanelInScreenshots": "スクリーンショットに含める", "launchAtLogin": "ログイン時に起動", "watermarkIncludeDate": "透かしに書き出し時刻を含める", "watermarkIncludeDevice": "透かしにデバイスIDを含める", "updates": "アップデート", "checkForUpdates": "アップデートを確認", "checkingForUpdates": "アップデートを確認中...", "openReleasesPage": "リリースページを開く", "updateAvailable": "新しいバージョンがあります", "noUpdateAvailable": "最新版です", "noUpdateAvailableHint": "現在のバージョンは最新です。", "updateCheckFailed": "アップデート確認に失敗", "updateCheckFailedHint": "現在アップデートを確認できません。後でもう一度試すか、メニューから GitHub リリースページを開いて確認してください。", "income": "収入", "monthlyIncome": "月収", "currencyUnit": "通貨単位", "workdaysInMonth": "今月の出勤日", "timer": "タイマー", "workMode": "計算方式", "fixedClockOut": "固定退勤", "unlockTimer": "ロック解除計時", "startTime": "始業時刻", "clockOutTime": "退勤時刻", "dailyHours": "1日の勤務時間", "done": "完了", "resetDefault": "初期値に戻す", "syncingTime": "ネットワーク時刻を同期中...", "noPanelContent": "表示内容が選択されていません", "currentTime": "現在時刻", "waitingIncome": "収入：時刻同期待ち", "waitingUnlock": "今日5時以降の初回ロック解除待ち", "clockOutNotificationTitle": "退勤時間です", "clockOutNotificationBody": "今日もお疲れさまでした。OffTick が退勤時間を知らせます。", "yuan": "元", "days": "日", "hoursUnit": "時間", "unlockRecords": "ロック解除記録", "exportUnlockRecords": "ロック解除記録を書き出す", "exportUnlockRecordsHint": "書き出す日付範囲を yyyy-MM-dd 形式で入力してください。", "exportStartDate": "開始日", "exportEndDate": "終了日", "export": "書き出す", "cancel": "キャンセル", "invalidDateRange": "日付範囲が無効です", "dateRangeFormatHint": "yyyy-MM-dd 形式を使用し、開始日が終了日より後にならないようにしてください。", "noUnlockRecords": "ロック解除記録がありません", "noUnlockRecordsHint": "選択した範囲に、5時以降の初回ロック解除記録はありません。", "exportComplete": "書き出し完了", "exportFailed": "書き出し失敗", "networkTimeUnavailable": "ネットワーク時刻を利用できません", "networkTimeUnavailableHint": "OffTick はネットワーク時刻を同期できませんでした。インターネットに接続してから再度書き出してください。", "launchAtLoginFailed": "ログイン時起動の設定に失敗しました", "launchAtLoginApprovalRequired": "システムの承認が必要です", "launchAtLoginApprovalRequiredHint": "「システム設定 > 一般 > ログイン項目」で OffTick を許可すると有効になります。"
@@ -2201,6 +2307,7 @@ struct WorkSettings {
     var includePanelInScreenshots: Bool
     var includeDateInExportWatermark: Bool
     var includeDeviceInExportWatermark: Bool
+    var exportDirectoryPath: String?
 
     static var `default`: WorkSettings {
         defaultSettings(for: Date())
@@ -2220,7 +2327,7 @@ struct WorkSettings {
             timeFormat: .twentyFourHour,
             calendarMode: .gregorian,
             panelSize: .medium,
-            language: .simplifiedChinese,
+            language: .systemDefault,
             showDateInPanel: true,
             showTimeInPanel: true,
             showCountdownInPanel: true,
@@ -2229,7 +2336,8 @@ struct WorkSettings {
             showIncomeDetailsInPanel: true,
             includePanelInScreenshots: false,
             includeDateInExportWatermark: true,
-            includeDeviceInExportWatermark: true
+            includeDeviceInExportWatermark: true,
+            exportDirectoryPath: nil
         )
     }
 
@@ -2271,7 +2379,8 @@ struct WorkSettings {
             showIncomeDetailsInPanel: defaults.object(forKey: "showIncomeDetailsInPanel").map { _ in defaults.bool(forKey: "showIncomeDetailsInPanel") } ?? fallback.showIncomeDetailsInPanel,
             includePanelInScreenshots: defaults.object(forKey: "includePanelInScreenshots").map { _ in defaults.bool(forKey: "includePanelInScreenshots") } ?? fallback.includePanelInScreenshots,
             includeDateInExportWatermark: defaults.object(forKey: "includeDateInExportWatermark").map { _ in defaults.bool(forKey: "includeDateInExportWatermark") } ?? fallback.includeDateInExportWatermark,
-            includeDeviceInExportWatermark: defaults.object(forKey: "includeDeviceInExportWatermark").map { _ in defaults.bool(forKey: "includeDeviceInExportWatermark") } ?? fallback.includeDeviceInExportWatermark
+            includeDeviceInExportWatermark: defaults.object(forKey: "includeDeviceInExportWatermark").map { _ in defaults.bool(forKey: "includeDeviceInExportWatermark") } ?? fallback.includeDeviceInExportWatermark,
+            exportDirectoryPath: defaults.string(forKey: "exportDirectoryPath")
         ).sanitized()
     }
 
@@ -2305,6 +2414,7 @@ struct WorkSettings {
             "includePanelInScreenshots",
             "includeDateInExportWatermark",
             "includeDeviceInExportWatermark",
+            "exportDirectoryPath",
             "didMigrateChinaWorkdaysDefault"
         ]
 
@@ -2353,10 +2463,16 @@ struct WorkSettings {
         defaults.set(sanitized.includePanelInScreenshots, forKey: "includePanelInScreenshots")
         defaults.set(sanitized.includeDateInExportWatermark, forKey: "includeDateInExportWatermark")
         defaults.set(sanitized.includeDeviceInExportWatermark, forKey: "includeDeviceInExportWatermark")
+        if let exportDirectoryPath = sanitized.exportDirectoryPath {
+            defaults.set(exportDirectoryPath, forKey: "exportDirectoryPath")
+        } else {
+            defaults.removeObject(forKey: "exportDirectoryPath")
+        }
     }
 
     private func sanitized() -> WorkSettings {
-        WorkSettings(
+        let normalizedExportDirectoryPath = exportDirectoryPath?.trimmingCharacters(in: .whitespacesAndNewlines)
+        return WorkSettings(
             monthlyIncome: max(0, monthlyIncome),
             currencyUnit: currencyUnit,
             workdaysInMonth: max(1, workdaysInMonth),
@@ -2378,7 +2494,8 @@ struct WorkSettings {
             showIncomeDetailsInPanel: showIncomeDetailsInPanel,
             includePanelInScreenshots: includePanelInScreenshots,
             includeDateInExportWatermark: includeDateInExportWatermark,
-            includeDeviceInExportWatermark: includeDeviceInExportWatermark
+            includeDeviceInExportWatermark: includeDeviceInExportWatermark,
+            exportDirectoryPath: normalizedExportDirectoryPath?.isEmpty == false ? normalizedExportDirectoryPath : nil
         )
     }
 
@@ -2394,6 +2511,14 @@ struct WorkSettings {
 
     var dailyIncome: Double {
         monthlyIncome / Double(workdaysInMonth)
+    }
+
+    var resolvedExportDirectoryURL: URL? {
+        guard let exportDirectoryPath, FileManager.default.fileExists(atPath: exportDirectoryPath) else {
+            return nil
+        }
+
+        return URL(fileURLWithPath: exportDirectoryPath, isDirectory: true)
     }
 
     var workDuration: TimeInterval {
