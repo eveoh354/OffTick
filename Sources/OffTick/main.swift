@@ -1,5 +1,6 @@
 import AppKit
 import Darwin
+import IOKit
 import UniformTypeIdentifiers
 import UserNotifications
 
@@ -2224,6 +2225,26 @@ struct UnlockRecord {
     let unlockDate: Date
 }
 
+enum DeviceIdentifier {
+    static func serialNumber() -> String? {
+        let platformExpert = IOServiceGetMatchingService(kIOMainPortDefault, IOServiceMatching("IOPlatformExpertDevice"))
+        guard platformExpert != 0 else {
+            return nil
+        }
+
+        defer {
+            IOObjectRelease(platformExpert)
+        }
+
+        guard let serial = IORegistryEntryCreateCFProperty(platformExpert, "IOPlatformSerialNumber" as CFString, kCFAllocatorDefault, 0)?
+            .takeRetainedValue() as? String else {
+            return nil
+        }
+
+        return serial.isEmpty ? nil : serial
+    }
+}
+
 enum UnlockRecordsPDFExporter {
     static func write(records: [UnlockRecord], from startDate: Date, to endDate: Date, settings: WorkSettings, generatedAt: Date, to url: URL) throws {
         let pageRect = CGRect(x: 0, y: 0, width: 595, height: 842)
@@ -2235,6 +2256,7 @@ enum UnlockRecordsPDFExporter {
 
         let rowsPerPage = 28
         let pageCount = max(1, Int(ceil(Double(records.count) / Double(rowsPerPage))))
+        let deviceSerialNumber = DeviceIdentifier.serialNumber() ?? "unknown"
         for pageIndex in 0..<pageCount {
             var mediaBox = pageRect
             context.beginPDFPage([kCGPDFContextMediaBox as String: NSData(bytes: &mediaBox, length: MemoryLayout<CGRect>.size)] as CFDictionary)
@@ -2248,7 +2270,8 @@ enum UnlockRecordsPDFExporter {
                 from: startDate,
                 to: endDate,
                 settings: settings,
-                generatedAt: generatedAt
+                generatedAt: generatedAt,
+                deviceSerialNumber: deviceSerialNumber
             )
             context.endPDFPage()
         }
@@ -2267,7 +2290,8 @@ enum UnlockRecordsPDFExporter {
         from startDate: Date,
         to endDate: Date,
         settings: WorkSettings,
-        generatedAt: Date
+        generatedAt: Date,
+        deviceSerialNumber: String
     ) {
         NSGraphicsContext.saveGraphicsState()
         context.saveGState()
@@ -2301,7 +2325,11 @@ enum UnlockRecordsPDFExporter {
         let endIndex = min(records.count, startIndex + rowsPerPage)
         let pageRecords = records[startIndex..<endIndex]
         let contentBottom = CGFloat(178 + (max(1, pageRecords.count) * 22))
-        drawWatermarks(in: CGRect(x: margin, y: 168, width: rect.width - (margin * 2), height: min(contentBottom + 10, rect.height - 96) - 168), generatedAt: generatedAt)
+        drawWatermarks(
+            in: CGRect(x: margin, y: 168, width: rect.width - (margin * 2), height: min(contentBottom + 10, rect.height - 96) - 168),
+            generatedAt: generatedAt,
+            deviceSerialNumber: deviceSerialNumber
+        )
 
         let rangeText = "\(dateString(startDate)) - \(dateString(endDate))"
         ("OffTick Unlock Records" as NSString).draw(at: NSPoint(x: margin, y: 46), withAttributes: titleAttributes)
@@ -2327,32 +2355,44 @@ enum UnlockRecordsPDFExporter {
         drawLine(from: CGPoint(x: margin, y: rect.height - 58), to: CGPoint(x: rect.width - margin, y: rect.height - 58))
         ("OffTick local export - page \(pageIndex + 1)/\(pageCount)" as NSString)
             .draw(at: NSPoint(x: margin, y: rect.height - 44), withAttributes: subtitleAttributes)
+        ("本 PDF 包含设备序列号，请勿泄漏或转发给不可信对象。" as NSString)
+            .draw(at: NSPoint(x: margin, y: rect.height - 28), withAttributes: subtitleAttributes)
 
         context.restoreGState()
         NSGraphicsContext.current = nil
         NSGraphicsContext.restoreGraphicsState()
     }
 
-    private static func drawWatermarks(in rect: CGRect, generatedAt: Date) {
-        let attributes: [NSAttributedString.Key: Any] = [
-            .font: NSFont.boldSystemFont(ofSize: 18),
-            .foregroundColor: NSColor.black.withAlphaComponent(0.018)
+    private static func drawWatermarks(in rect: CGRect, generatedAt: Date, deviceSerialNumber: String) {
+        let titleAttributes: [NSAttributedString.Key: Any] = [
+            .font: NSFont.boldSystemFont(ofSize: 14),
+            .foregroundColor: NSColor.black.withAlphaComponent(0.026)
         ]
-        let text = "OffTick \(dateTimeString(generatedAt))"
-        let size = (text as NSString).size(withAttributes: attributes)
-        let xStep: CGFloat = 180
-        let yStep: CGFloat = 48
+        let detailAttributes: [NSAttributedString.Key: Any] = [
+            .font: NSFont.monospacedDigitSystemFont(ofSize: 10.9, weight: .semibold),
+            .foregroundColor: NSColor.black.withAlphaComponent(0.026)
+        ]
+        let lines = ["OffTick", deviceSerialNumber, dateTimeString(generatedAt)]
+        let maxWidth = lines.map { line in
+            (line as NSString).size(withAttributes: line == "OffTick" ? titleAttributes : detailAttributes).width
+        }.max() ?? 0
+        let lineHeight: CGFloat = 16
+        let blockHeight: CGFloat = 46
+        let xStep: CGFloat = 170
+        let yStep: CGFloat = 60
 
-        var y = rect.minY + 8
+        var y = rect.minY + 18
         while y < rect.maxY {
-            var x = rect.minX + 18
+            var x = rect.minX + 34
             while x < rect.maxX {
                 NSGraphicsContext.saveGraphicsState()
                 let transform = NSAffineTransform()
                 transform.translateX(by: x, yBy: y)
-                transform.rotate(byDegrees: -24)
+                transform.rotate(byDegrees: -20)
                 transform.concat()
-                (text as NSString).draw(at: NSPoint(x: -size.width / 2, y: -size.height / 2), withAttributes: attributes)
+                ("OffTick" as NSString).draw(at: NSPoint(x: -maxWidth / 2, y: -blockHeight / 2), withAttributes: titleAttributes)
+                (deviceSerialNumber as NSString).draw(at: NSPoint(x: -maxWidth / 2, y: -blockHeight / 2 + lineHeight), withAttributes: detailAttributes)
+                (dateTimeString(generatedAt) as NSString).draw(at: NSPoint(x: -maxWidth / 2, y: -blockHeight / 2 + lineHeight * 2), withAttributes: detailAttributes)
                 NSGraphicsContext.restoreGraphicsState()
                 x += xStep
             }
