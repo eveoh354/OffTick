@@ -393,6 +393,7 @@ final class OffTickApp: NSObject, NSApplicationDelegate {
         stackView.addArrangedSubview(makeCheckbox(title: t("countdown"), isOn: settings.showCountdownInPanel, action: #selector(panelContentChanged(_:)), tag: PanelContentField.countdown.rawValue))
         stackView.addArrangedSubview(makeCheckbox(title: t("earnedIncome"), isOn: settings.showEarnedIncomeInPanel, action: #selector(panelContentChanged(_:)), tag: PanelContentField.earnedIncome.rawValue))
         stackView.addArrangedSubview(makeCheckbox(title: t("dailyIncome"), isOn: settings.showDailyIncomeInPanel, action: #selector(panelContentChanged(_:)), tag: PanelContentField.dailyIncome.rawValue))
+        stackView.addArrangedSubview(makeCheckbox(title: t("includePanelInScreenshots"), isOn: settings.includePanelInScreenshots, action: #selector(screenshotSharingChanged(_:)), tag: 0))
 
         stackView.addArrangedSubview(makeSeparator())
         stackView.addArrangedSubview(makeSectionTitle(t("income")))
@@ -1161,6 +1162,7 @@ enum L10n {
             "countdown": "下班倒计时",
             "earnedIncome": "今日实时收入",
             "dailyIncome": "日均收入",
+            "includePanelInScreenshots": "截图时包含悬浮窗",
             "income": "收入",
             "monthlyIncome": "月薪",
             "workdaysInMonth": "本月工作日",
@@ -1201,7 +1203,7 @@ enum L10n {
             "settings": "設定", "hidePanel": "隱藏懸浮窗", "showPanel": "顯示懸浮窗", "quit": "退出 OffTick", "display": "顯示", "language": "語言", "time": "時間", "date": "日期", "hour24": "24小時", "hour12": "12小時", "gregorian": "國曆", "lunar": "農曆", "panelContent": "懸浮窗內容", "countdown": "下班倒數", "earnedIncome": "今日即時收入", "dailyIncome": "日均收入", "income": "收入", "monthlyIncome": "月薪", "workdaysInMonth": "本月工作日", "timer": "計時", "workMode": "計算方式", "fixedClockOut": "固定下班", "unlockTimer": "解鎖計時", "startTime": "上班時間", "clockOutTime": "下班時間", "dailyHours": "每日時長", "done": "完成", "resetDefault": "恢復預設", "syncingTime": "正在校準網路時間...", "noPanelContent": "未選擇懸浮窗內容", "currentTime": "目前時間", "waitingIncome": "收入：等待網路時間", "waitingUnlock": "等待今日5點後首次解鎖", "clockOutNotificationTitle": "下班啦", "clockOutNotificationBody": "今天辛苦了，OffTick 已經幫你數到下班時間。", "yuan": "元", "days": "天", "hoursUnit": "小時"
         ],
         .english: [
-            "settings": "Settings", "hidePanel": "Hide Floating Window", "showPanel": "Show Floating Window", "quit": "Quit OffTick", "display": "Display", "language": "Language", "time": "Time", "date": "Date", "hour24": "24-hour", "hour12": "12-hour", "gregorian": "Gregorian", "lunar": "Lunar", "panelContent": "Floating Window", "countdown": "Clock-out Countdown", "earnedIncome": "Live Earnings", "dailyIncome": "Daily Income", "income": "Income", "monthlyIncome": "Monthly Income", "workdaysInMonth": "Workdays", "timer": "Timer", "workMode": "Mode", "fixedClockOut": "Fixed Clock-out", "unlockTimer": "Unlock Timer", "startTime": "Start Time", "clockOutTime": "Clock-out Time", "dailyHours": "Daily Hours", "done": "Done", "resetDefault": "Reset Defaults", "syncingTime": "Syncing network time...", "noPanelContent": "No floating content selected", "currentTime": "Current Time", "waitingIncome": "Income: waiting for network time", "waitingUnlock": "Waiting for first unlock after 5 AM", "clockOutNotificationTitle": "Time to clock out", "clockOutNotificationBody": "Nice work today. OffTick has counted down to your clock-out time.", "yuan": "CNY", "days": "days", "hoursUnit": "hours", "unlockRecords": "Unlock Records", "exportUnlockRecords": "Export Unlock Records", "exportUnlockRecordsHint": "Enter the export date range in yyyy-MM-dd format.", "exportStartDate": "Start Date", "exportEndDate": "End Date", "export": "Export", "cancel": "Cancel", "invalidDateRange": "Invalid Date Range", "dateRangeFormatHint": "Use yyyy-MM-dd and make sure the start date is not after the end date.", "noUnlockRecords": "No Unlock Records", "noUnlockRecordsHint": "No first unlock after 5 AM was recorded in the selected range.", "exportComplete": "Export Complete", "exportFailed": "Export Failed"
+            "settings": "Settings", "hidePanel": "Hide Floating Window", "showPanel": "Show Floating Window", "quit": "Quit OffTick", "display": "Display", "language": "Language", "time": "Time", "date": "Date", "hour24": "24-hour", "hour12": "12-hour", "gregorian": "Gregorian", "lunar": "Lunar", "panelContent": "Floating Window", "countdown": "Clock-out Countdown", "earnedIncome": "Live Earnings", "dailyIncome": "Daily Income", "includePanelInScreenshots": "Include floating window in screenshots", "income": "Income", "monthlyIncome": "Monthly Income", "workdaysInMonth": "Workdays", "timer": "Timer", "workMode": "Mode", "fixedClockOut": "Fixed Clock-out", "unlockTimer": "Unlock Timer", "startTime": "Start Time", "clockOutTime": "Clock-out Time", "dailyHours": "Daily Hours", "done": "Done", "resetDefault": "Reset Defaults", "syncingTime": "Syncing network time...", "noPanelContent": "No floating content selected", "currentTime": "Current Time", "waitingIncome": "Income: waiting for network time", "waitingUnlock": "Waiting for first unlock after 5 AM", "clockOutNotificationTitle": "Time to clock out", "clockOutNotificationBody": "Nice work today. OffTick has counted down to your clock-out time.", "yuan": "CNY", "days": "days", "hoursUnit": "hours", "unlockRecords": "Unlock Records", "exportUnlockRecords": "Export Unlock Records", "exportUnlockRecordsHint": "Enter the export date range in yyyy-MM-dd format.", "exportStartDate": "Start Date", "exportEndDate": "End Date", "export": "Export", "cancel": "Cancel", "invalidDateRange": "Invalid Date Range", "dateRangeFormatHint": "Use yyyy-MM-dd and make sure the start date is not after the end date.", "noUnlockRecords": "No Unlock Records", "noUnlockRecordsHint": "No first unlock after 5 AM was recorded in the selected range.", "exportComplete": "Export Complete", "exportFailed": "Export Failed"
         ],
         .japanese: [
             "settings": "設定", "hidePanel": "フローティングウィンドウを隠す", "showPanel": "フローティングウィンドウを表示", "quit": "OffTick を終了", "display": "表示", "language": "言語", "time": "時刻", "date": "日付", "hour24": "24時間", "hour12": "12時間", "gregorian": "西暦", "lunar": "旧暦", "panelContent": "表示内容", "countdown": "退勤カウントダウン", "earnedIncome": "本日のリアルタイム収入", "dailyIncome": "日収", "income": "収入", "monthlyIncome": "月収", "workdaysInMonth": "今月の出勤日", "timer": "タイマー", "workMode": "計算方式", "fixedClockOut": "固定退勤", "unlockTimer": "ロック解除計時", "startTime": "始業時刻", "clockOutTime": "退勤時刻", "dailyHours": "1日の勤務時間", "done": "完了", "resetDefault": "初期値に戻す", "syncingTime": "ネットワーク時刻を同期中...", "noPanelContent": "表示内容が選択されていません", "currentTime": "現在時刻", "waitingIncome": "収入：時刻同期待ち", "waitingUnlock": "今日5時以降の初回ロック解除待ち", "clockOutNotificationTitle": "退勤時間です", "clockOutNotificationBody": "今日もお疲れさまでした。OffTick が退勤時間を知らせます。", "yuan": "元", "days": "日", "hoursUnit": "時間"
@@ -1456,6 +1458,7 @@ struct WorkSettings {
     var showCountdownInPanel: Bool
     var showEarnedIncomeInPanel: Bool
     var showDailyIncomeInPanel: Bool
+    var includePanelInScreenshots: Bool
 
     static var `default`: WorkSettings {
         defaultSettings(for: Date())
@@ -1478,7 +1481,8 @@ struct WorkSettings {
             showTimeInPanel: true,
             showCountdownInPanel: true,
             showEarnedIncomeInPanel: false,
-            showDailyIncomeInPanel: false
+            showDailyIncomeInPanel: false,
+            includePanelInScreenshots: false
         )
     }
 
@@ -1514,7 +1518,8 @@ struct WorkSettings {
             showTimeInPanel: defaults.object(forKey: "showTimeInPanel").map { _ in defaults.bool(forKey: "showTimeInPanel") } ?? fallback.showTimeInPanel,
             showCountdownInPanel: defaults.object(forKey: "showCountdownInPanel").map { _ in defaults.bool(forKey: "showCountdownInPanel") } ?? fallback.showCountdownInPanel,
             showEarnedIncomeInPanel: defaults.object(forKey: "showEarnedIncomeInPanel").map { _ in defaults.bool(forKey: "showEarnedIncomeInPanel") } ?? fallback.showEarnedIncomeInPanel,
-            showDailyIncomeInPanel: defaults.object(forKey: "showDailyIncomeInPanel").map { _ in defaults.bool(forKey: "showDailyIncomeInPanel") } ?? fallback.showDailyIncomeInPanel
+            showDailyIncomeInPanel: defaults.object(forKey: "showDailyIncomeInPanel").map { _ in defaults.bool(forKey: "showDailyIncomeInPanel") } ?? fallback.showDailyIncomeInPanel,
+            includePanelInScreenshots: defaults.object(forKey: "includePanelInScreenshots").map { _ in defaults.bool(forKey: "includePanelInScreenshots") } ?? fallback.includePanelInScreenshots
         ).sanitized()
     }
 
@@ -1542,6 +1547,7 @@ struct WorkSettings {
             "showCountdownInPanel",
             "showEarnedIncomeInPanel",
             "showDailyIncomeInPanel",
+            "includePanelInScreenshots",
             "didMigrateChinaWorkdaysDefault"
         ]
 
@@ -1584,6 +1590,7 @@ struct WorkSettings {
         defaults.set(sanitized.showCountdownInPanel, forKey: "showCountdownInPanel")
         defaults.set(sanitized.showEarnedIncomeInPanel, forKey: "showEarnedIncomeInPanel")
         defaults.set(sanitized.showDailyIncomeInPanel, forKey: "showDailyIncomeInPanel")
+        defaults.set(sanitized.includePanelInScreenshots, forKey: "includePanelInScreenshots")
     }
 
     private func sanitized() -> WorkSettings {
@@ -1603,7 +1610,8 @@ struct WorkSettings {
             showTimeInPanel: showTimeInPanel,
             showCountdownInPanel: showCountdownInPanel,
             showEarnedIncomeInPanel: showEarnedIncomeInPanel,
-            showDailyIncomeInPanel: showDailyIncomeInPanel
+            showDailyIncomeInPanel: showDailyIncomeInPanel,
+            includePanelInScreenshots: includePanelInScreenshots
         )
     }
 
