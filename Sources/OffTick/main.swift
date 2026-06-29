@@ -480,26 +480,12 @@ final class OffTickApp: NSObject, NSApplicationDelegate {
             $0.bezelStyle = .roundedBezel
             $0.controlSize = .regular
             $0.font = .monospacedDigitSystemFont(ofSize: 13, weight: .regular)
-            $0.translatesAutoresizingMaskIntoConstraints = false
-            $0.widthAnchor.constraint(equalToConstant: 120).isActive = true
-            $0.heightAnchor.constraint(equalToConstant: 24).isActive = true
+            $0.frame.size = NSSize(width: 140, height: 24)
         }
 
-        let stack = NSStackView()
-        stack.orientation = .vertical
-        stack.alignment = .leading
-        stack.spacing = 10
-        stack.addArrangedSubview(makeRow(label: t("exportStartDate"), control: startField, suffix: nil))
-        stack.addArrangedSubview(makeRow(label: t("exportEndDate"), control: endField, suffix: nil))
-
-        let accessoryView = NSView(frame: NSRect(x: 0, y: 0, width: 320, height: 64))
-        accessoryView.addSubview(stack)
-        NSLayoutConstraint.activate([
-            stack.leadingAnchor.constraint(equalTo: accessoryView.leadingAnchor),
-            stack.trailingAnchor.constraint(equalTo: accessoryView.trailingAnchor),
-            stack.topAnchor.constraint(equalTo: accessoryView.topAnchor),
-            stack.bottomAnchor.constraint(equalTo: accessoryView.bottomAnchor)
-        ])
+        let accessoryView = NSView(frame: NSRect(x: 0, y: 0, width: 300, height: 70))
+        addExportDateRow(to: accessoryView, label: t("exportStartDate"), field: startField, y: 40)
+        addExportDateRow(to: accessoryView, label: t("exportEndDate"), field: endField, y: 6)
 
         let alert = NSAlert()
         alert.messageText = t("exportUnlockRecords")
@@ -541,6 +527,18 @@ final class OffTickApp: NSObject, NSApplicationDelegate {
         } catch {
             showMessage(title: t("exportFailed"), message: error.localizedDescription)
         }
+    }
+
+    private func addExportDateRow(to container: NSView, label: String, field: NSTextField, y: CGFloat) {
+        let labelView = NSTextField(labelWithString: label)
+        labelView.font = .systemFont(ofSize: 13)
+        labelView.textColor = .secondaryLabelColor
+        labelView.alignment = .right
+        labelView.frame = NSRect(x: 0, y: y + 3, width: 82, height: 18)
+
+        field.frame.origin = NSPoint(x: 96, y: y)
+        container.addSubview(labelView)
+        container.addSubview(field)
     }
 
     private func showMessage(title: String, message: String) {
