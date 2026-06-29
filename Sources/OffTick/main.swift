@@ -2386,7 +2386,7 @@ struct WorkSettings {
         WorkSettings(
             monthlyIncome: 10_000,
             currencyUnit: .systemDefault,
-            workdaysInMonth: ChinaWorkCalendar.workdaysInMonth(containing: date),
+            workdaysInMonth: WorkCalendar.workdaysInMonth(containing: date),
             dailyWorkHours: 8,
             fixedStartHour: 9,
             fixedStartMinute: 0,
@@ -2637,10 +2637,15 @@ extension Calendar {
     }
 }
 
-struct ChinaWorkCalendar {
+struct WorkCalendar {
     private static let calendar = Calendar(identifier: .gregorian)
 
     static func workdaysInMonth(containing date: Date) -> Int {
+        workdaysInMonth(containing: date, regionCode: Locale.current.regionCode)
+    }
+
+    static func workdaysInMonth(containing date: Date, regionCode: String?) -> Int {
+        let normalizedRegionCode = regionCode?.uppercased()
         let components = calendar.dateComponents([.year, .month], from: date)
         guard let year = components.year,
               let month = components.month,
@@ -2654,23 +2659,36 @@ struct ChinaWorkCalendar {
                 return count
             }
 
-            return count + (isWorkday(current) ? 1 : 0)
+            return count + (isWorkday(current, regionCode: normalizedRegionCode) ? 1 : 0)
         }
     }
 
-    private static func isWorkday(_ date: Date) -> Bool {
+    private static func isWorkday(_ date: Date, regionCode: String?) -> Bool {
         let key = dateKey(date)
 
-        if adjustedWorkdays2026.contains(key) {
+        if regionCode == "CN", adjustedWorkdays2026.contains(key) {
             return true
         }
 
-        if holidays2026.contains(key) {
+        if regionCode == "CN", holidays2026.contains(key) {
             return false
         }
 
         let weekday = calendar.component(.weekday, from: date)
-        return weekday != 1 && weekday != 7
+        return !weekendWeekdays(for: regionCode).contains(weekday)
+    }
+
+    private static func weekendWeekdays(for regionCode: String?) -> Set<Int> {
+        switch regionCode {
+        case "AF", "BH", "BD", "DZ", "EG", "IQ", "IR", "JO", "KW", "LY", "MV", "OM", "PS", "QA", "SA", "SD", "SY", "YE":
+            return [6, 7]
+        case "BN":
+            return [6, 1]
+        case "NP":
+            return [7]
+        default:
+            return [1, 7]
+        }
     }
 
     private static func dateKey(_ date: Date) -> String {
