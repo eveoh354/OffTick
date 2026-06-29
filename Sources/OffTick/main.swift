@@ -1,5 +1,6 @@
 import AppKit
 import Darwin
+import UniformTypeIdentifiers
 import UserNotifications
 
 final class OffTickApp: NSObject, NSApplicationDelegate {
@@ -112,6 +113,10 @@ final class OffTickApp: NSObject, NSApplicationDelegate {
     }
 
     private func recordUnlockIfNeeded() {
+        guard settings.mode == .unlockTimer else {
+            return
+        }
+
         guard timeProvider.isSynced else {
             return
         }
@@ -359,7 +364,7 @@ final class OffTickApp: NSObject, NSApplicationDelegate {
 
     private func renderSettings() {
         clearStack()
-        panel.setContentSize(NSSize(width: 340, height: settings.mode == .fixedTime ? 552 : 502))
+        panel.setContentSize(NSSize(width: 340, height: 552))
 
         let title = makeLabel(t("settings"), size: 18, weight: .semibold)
         stackView.addArrangedSubview(title)
@@ -436,6 +441,10 @@ final class OffTickApp: NSObject, NSApplicationDelegate {
         case .unlockTimer:
             let dailyHoursField = makeNumberField(value: settings.dailyWorkHours, tag: SettingField.dailyWorkHours.rawValue)
             stackView.addArrangedSubview(makeRow(label: t("dailyHours"), control: dailyHoursField, suffix: t("hoursUnit")))
+
+            let exportButton = NSButton(title: t("exportUnlockRecords"), target: self, action: #selector(exportUnlockRecords))
+            exportButton.bezelStyle = .rounded
+            stackView.addArrangedSubview(makeRow(label: t("unlockRecords"), control: exportButton, suffix: nil))
         }
 
         let footer = NSStackView()
@@ -453,9 +462,88 @@ final class OffTickApp: NSObject, NSApplicationDelegate {
         footer.addArrangedSubview(resetButton)
         stackView.addArrangedSubview(footer)
 
-        statusItem.button?.title = "● OffTick"
-        statusItem.button?.toolTip = "OffTick \(t("settings"))"
+        configureStatusItemButton(toolTip: "OffTick \(t("settings"))")
     }
+
+    @objc private func exportUnlockRecords() {
+        let now = timeProvider.isSynced ? timeProvider.now : Date()
+        let calendar = Calendar.beijing
+        let defaultStart = calendar.date(byAdding: .month, value: -1, to: now) ?? now
+        let dateFormatter = Self.exportDateFormatter
+
+        let startField = NSTextField(string: dateFormatter.string(from: defaultStart))
+        let endField = NSTextField(string: dateFormatter.string(from: now))
+        [startField, endField].forEach {
+            $0.placeholderString = "yyyy-MM-dd"
+            $0.font = .monospacedDigitSystemFont(ofSize: 13, weight: .regular)
+            $0.widthAnchor.constraint(equalToConstant: 120).isActive = true
+        }
+
+        let stack = NSStackView()
+        stack.orientation = .vertical
+        stack.alignment = .leading
+        stack.spacing = 10
+        stack.addArrangedSubview(makeRow(label: t("exportStartDate"), control: startField, suffix: nil))
+        stack.addArrangedSubview(makeRow(label: t("exportEndDate"), control: endField, suffix: nil))
+
+        let alert = NSAlert()
+        alert.messageText = t("exportUnlockRecords")
+        alert.informativeText = t("exportUnlockRecordsHint")
+        alert.accessoryView = stack
+        alert.addButton(withTitle: t("export"))
+        alert.addButton(withTitle: t("cancel"))
+
+        guard alert.runModal() == .alertFirstButtonReturn else {
+            return
+        }
+
+        guard let startDate = dateFormatter.date(from: startField.stringValue),
+              let endDate = dateFormatter.date(from: endField.stringValue),
+              startDate <= endDate else {
+            showMessage(title: t("invalidDateRange"), message: t("dateRangeFormatHint"))
+            return
+        }
+
+        let endOfDay = calendar.date(byAdding: DateComponents(day: 1, second: -1), to: calendar.startOfDay(for: endDate)) ?? endDate
+        let records = WorkSessionClock.records(from: startDate, to: endOfDay)
+        guard !records.isEmpty else {
+            showMessage(title: t("noUnlockRecords"), message: t("noUnlockRecordsHint"))
+            return
+        }
+
+        let savePanel = NSSavePanel()
+        savePanel.allowedContentTypes = [.pdf]
+        savePanel.canCreateDirectories = true
+        savePanel.nameFieldStringValue = "OffTick-Unlock-Records-\(WorkSessionClock.dateKey(startDate))-\(WorkSessionClock.dateKey(endDate)).pdf"
+
+        guard savePanel.runModal() == .OK, let url = savePanel.url else {
+            return
+        }
+
+        do {
+            try UnlockRecordsPDFExporter.write(records: records, from: startDate, to: endOfDay, settings: settings, to: url)
+            showMessage(title: t("exportComplete"), message: url.path)
+        } catch {
+            showMessage(title: t("exportFailed"), message: error.localizedDescription)
+        }
+    }
+
+    private func showMessage(title: String, message: String) {
+        let alert = NSAlert()
+        alert.messageText = title
+        alert.informativeText = message
+        alert.addButton(withTitle: "OK")
+        alert.runModal()
+    }
+
+    private static let exportDateFormatter: DateFormatter = {
+        let formatter = DateFormatter()
+        formatter.calendar = Calendar.beijing
+        formatter.locale = Locale(identifier: "en_US_POSIX")
+        formatter.timeZone = TimeZone(identifier: "Asia/Shanghai")
+        formatter.dateFormat = "yyyy-MM-dd"
+        return formatter
+    }()
 
     private func renderSyncing() {
         clearStack()
@@ -765,6 +853,7 @@ final class OffTickApp: NSObject, NSApplicationDelegate {
     @objc private func modeChanged(_ sender: NSSegmentedControl) {
         settings.mode = sender.selectedSegment == 0 ? .fixedTime : .unlockTimer
         settings.save()
+        recordUnlockIfNeeded()
         renderSettings()
     }
 
@@ -1065,13 +1154,26 @@ enum L10n {
             "clockOutNotificationBody": "今天辛苦了，OffTick 已经帮你数到下班时间。",
             "yuan": "元",
             "days": "天",
-            "hoursUnit": "小时"
+            "hoursUnit": "小时",
+            "unlockRecords": "解锁记录",
+            "exportUnlockRecords": "导出解锁记录",
+            "exportUnlockRecordsHint": "请输入导出的日期范围，格式为 yyyy-MM-dd。",
+            "exportStartDate": "开始日期",
+            "exportEndDate": "结束日期",
+            "export": "导出",
+            "cancel": "取消",
+            "invalidDateRange": "日期范围无效",
+            "dateRangeFormatHint": "请使用 yyyy-MM-dd 格式，并确保开始日期不晚于结束日期。",
+            "noUnlockRecords": "没有解锁记录",
+            "noUnlockRecordsHint": "所选范围内没有记录到 5 点后的首次解锁时间。",
+            "exportComplete": "导出完成",
+            "exportFailed": "导出失败"
         ],
         .traditionalChinese: [
             "settings": "設定", "hidePanel": "隱藏懸浮窗", "showPanel": "顯示懸浮窗", "quit": "退出 OffTick", "display": "顯示", "language": "語言", "time": "時間", "date": "日期", "hour24": "24小時", "hour12": "12小時", "gregorian": "國曆", "lunar": "農曆", "panelContent": "懸浮窗內容", "countdown": "下班倒數", "earnedIncome": "今日即時收入", "dailyIncome": "日均收入", "income": "收入", "monthlyIncome": "月薪", "workdaysInMonth": "本月工作日", "timer": "計時", "workMode": "計算方式", "fixedClockOut": "固定下班", "unlockTimer": "解鎖計時", "startTime": "上班時間", "clockOutTime": "下班時間", "dailyHours": "每日時長", "done": "完成", "resetDefault": "恢復預設", "syncingTime": "正在校準網路時間...", "noPanelContent": "未選擇懸浮窗內容", "currentTime": "目前時間", "waitingIncome": "收入：等待網路時間", "waitingUnlock": "等待今日5點後首次解鎖", "clockOutNotificationTitle": "下班啦", "clockOutNotificationBody": "今天辛苦了，OffTick 已經幫你數到下班時間。", "yuan": "元", "days": "天", "hoursUnit": "小時"
         ],
         .english: [
-            "settings": "Settings", "hidePanel": "Hide Floating Window", "showPanel": "Show Floating Window", "quit": "Quit OffTick", "display": "Display", "language": "Language", "time": "Time", "date": "Date", "hour24": "24-hour", "hour12": "12-hour", "gregorian": "Gregorian", "lunar": "Lunar", "panelContent": "Floating Window", "countdown": "Clock-out Countdown", "earnedIncome": "Live Earnings", "dailyIncome": "Daily Income", "income": "Income", "monthlyIncome": "Monthly Income", "workdaysInMonth": "Workdays", "timer": "Timer", "workMode": "Mode", "fixedClockOut": "Fixed Clock-out", "unlockTimer": "Unlock Timer", "startTime": "Start Time", "clockOutTime": "Clock-out Time", "dailyHours": "Daily Hours", "done": "Done", "resetDefault": "Reset Defaults", "syncingTime": "Syncing network time...", "noPanelContent": "No floating content selected", "currentTime": "Current Time", "waitingIncome": "Income: waiting for network time", "waitingUnlock": "Waiting for first unlock after 5 AM", "clockOutNotificationTitle": "Time to clock out", "clockOutNotificationBody": "Nice work today. OffTick has counted down to your clock-out time.", "yuan": "CNY", "days": "days", "hoursUnit": "hours"
+            "settings": "Settings", "hidePanel": "Hide Floating Window", "showPanel": "Show Floating Window", "quit": "Quit OffTick", "display": "Display", "language": "Language", "time": "Time", "date": "Date", "hour24": "24-hour", "hour12": "12-hour", "gregorian": "Gregorian", "lunar": "Lunar", "panelContent": "Floating Window", "countdown": "Clock-out Countdown", "earnedIncome": "Live Earnings", "dailyIncome": "Daily Income", "income": "Income", "monthlyIncome": "Monthly Income", "workdaysInMonth": "Workdays", "timer": "Timer", "workMode": "Mode", "fixedClockOut": "Fixed Clock-out", "unlockTimer": "Unlock Timer", "startTime": "Start Time", "clockOutTime": "Clock-out Time", "dailyHours": "Daily Hours", "done": "Done", "resetDefault": "Reset Defaults", "syncingTime": "Syncing network time...", "noPanelContent": "No floating content selected", "currentTime": "Current Time", "waitingIncome": "Income: waiting for network time", "waitingUnlock": "Waiting for first unlock after 5 AM", "clockOutNotificationTitle": "Time to clock out", "clockOutNotificationBody": "Nice work today. OffTick has counted down to your clock-out time.", "yuan": "CNY", "days": "days", "hoursUnit": "hours", "unlockRecords": "Unlock Records", "exportUnlockRecords": "Export Unlock Records", "exportUnlockRecordsHint": "Enter the export date range in yyyy-MM-dd format.", "exportStartDate": "Start Date", "exportEndDate": "End Date", "export": "Export", "cancel": "Cancel", "invalidDateRange": "Invalid Date Range", "dateRangeFormatHint": "Use yyyy-MM-dd and make sure the start date is not after the end date.", "noUnlockRecords": "No Unlock Records", "noUnlockRecordsHint": "No first unlock after 5 AM was recorded in the selected range.", "exportComplete": "Export Complete", "exportFailed": "Export Failed"
         ],
         .japanese: [
             "settings": "設定", "hidePanel": "フローティングウィンドウを隠す", "showPanel": "フローティングウィンドウを表示", "quit": "OffTick を終了", "display": "表示", "language": "言語", "time": "時刻", "date": "日付", "hour24": "24時間", "hour12": "12時間", "gregorian": "西暦", "lunar": "旧暦", "panelContent": "表示内容", "countdown": "退勤カウントダウン", "earnedIncome": "本日のリアルタイム収入", "dailyIncome": "日収", "income": "収入", "monthlyIncome": "月収", "workdaysInMonth": "今月の出勤日", "timer": "タイマー", "workMode": "計算方式", "fixedClockOut": "固定退勤", "unlockTimer": "ロック解除計時", "startTime": "始業時刻", "clockOutTime": "退勤時刻", "dailyHours": "1日の勤務時間", "done": "完了", "resetDefault": "初期値に戻す", "syncingTime": "ネットワーク時刻を同期中...", "noPanelContent": "表示内容が選択されていません", "currentTime": "現在時刻", "waitingIncome": "収入：時刻同期待ち", "waitingUnlock": "今日5時以降の初回ロック解除待ち", "clockOutNotificationTitle": "退勤時間です", "clockOutNotificationBody": "今日もお疲れさまでした。OffTick が退勤時間を知らせます。", "yuan": "元", "days": "日", "hoursUnit": "時間"
@@ -1353,6 +1455,8 @@ struct WorkSettings {
     }
 
     static func load() -> WorkSettings {
+        migrateLegacyDefaultsIfNeeded()
+
         let defaults = UserDefaults.standard
         let fallback = WorkSettings.default
         let workdaysKey = "workdaysInMonth"
@@ -1384,6 +1488,53 @@ struct WorkSettings {
             showEarnedIncomeInPanel: defaults.object(forKey: "showEarnedIncomeInPanel").map { _ in defaults.bool(forKey: "showEarnedIncomeInPanel") } ?? fallback.showEarnedIncomeInPanel,
             showDailyIncomeInPanel: defaults.object(forKey: "showDailyIncomeInPanel").map { _ in defaults.bool(forKey: "showDailyIncomeInPanel") } ?? fallback.showDailyIncomeInPanel
         ).sanitized()
+    }
+
+    private static func migrateLegacyDefaultsIfNeeded() {
+        let markerKey = "didMigrateLegacyDefaultsToOnlineEveoh"
+        let defaults = UserDefaults.standard
+        guard !defaults.bool(forKey: markerKey) else {
+            return
+        }
+
+        let explicitKeys = [
+            "monthlyIncome",
+            "workdaysInMonth",
+            "dailyWorkHours",
+            "fixedStartHour",
+            "fixedStartMinute",
+            "fixedClockOutHour",
+            "fixedClockOutMinute",
+            ClockOutMode.storageKey,
+            TimeFormatMode.storageKey,
+            CalendarMode.storageKey,
+            AppLanguage.storageKey,
+            "showDateInPanel",
+            "showTimeInPanel",
+            "showCountdownInPanel",
+            "showEarnedIncomeInPanel",
+            "showDailyIncomeInPanel",
+            "didMigrateChinaWorkdaysDefault"
+        ]
+
+        for domain in ["dev.local.OffTick", "OffTick"] {
+            guard let legacyDefaults = UserDefaults(suiteName: domain) else {
+                continue
+            }
+
+            let legacyValues = legacyDefaults.dictionaryRepresentation()
+            for key in explicitKeys where defaults.object(forKey: key) == nil {
+                if let value = legacyValues[key] {
+                    defaults.set(value, forKey: key)
+                }
+            }
+
+            for (key, value) in legacyValues where key.hasPrefix("firstUnlockAfterFive-") && defaults.object(forKey: key) == nil {
+                defaults.set(value, forKey: key)
+            }
+        }
+
+        defaults.set(true, forKey: markerKey)
     }
 
     func save() {
@@ -1698,6 +1849,27 @@ struct WorkSessionClock {
         }
     }
 
+    static func records(from startDate: Date, to endDate: Date) -> [UnlockRecord] {
+        let defaults = UserDefaults.standard
+        let startDay = Calendar.beijing.startOfDay(for: startDate)
+        let endDay = Calendar.beijing.startOfDay(for: endDate)
+
+        return defaults.dictionaryRepresentation().compactMap { key, value in
+            guard key.hasPrefix("\(unlockDatePrefix)-"),
+                  let unlockDate = value as? Date else {
+                return nil
+            }
+
+            let recordDay = Calendar.beijing.startOfDay(for: unlockDate)
+            guard recordDay >= startDay && recordDay <= endDay else {
+                return nil
+            }
+
+            return UnlockRecord(dateKey: dateKey(unlockDate), unlockDate: unlockDate)
+        }
+        .sorted { $0.unlockDate < $1.unlockDate }
+    }
+
     static func workStartDate(now: Date) -> Date? {
         let defaults = UserDefaults.standard
         return defaults.object(forKey: unlockKey(now)) as? Date
@@ -1720,4 +1892,163 @@ struct WorkSessionClock {
         let components = Calendar.beijing.dateComponents([.year, .month, .day], from: date)
         return String(format: "%04d-%02d-%02d", components.year ?? 0, components.month ?? 0, components.day ?? 0)
     }
+}
+
+struct UnlockRecord {
+    let dateKey: String
+    let unlockDate: Date
+}
+
+enum UnlockRecordsPDFExporter {
+    static func write(records: [UnlockRecord], from startDate: Date, to endDate: Date, settings: WorkSettings, to url: URL) throws {
+        let pageRect = CGRect(x: 0, y: 0, width: 595, height: 842)
+        let data = NSMutableData()
+        guard let consumer = CGDataConsumer(data: data),
+              let context = CGContext(consumer: consumer, mediaBox: nil, nil) else {
+            throw NSError(domain: "OffTick", code: 1, userInfo: [NSLocalizedDescriptionKey: "Unable to create PDF context."])
+        }
+
+        let rowsPerPage = 28
+        let pageCount = max(1, Int(ceil(Double(records.count) / Double(rowsPerPage))))
+        for pageIndex in 0..<pageCount {
+            var mediaBox = pageRect
+            context.beginPDFPage([kCGPDFContextMediaBox as String: NSData(bytes: &mediaBox, length: MemoryLayout<CGRect>.size)] as CFDictionary)
+            drawPage(
+                context: context,
+                rect: pageRect,
+                records: records,
+                pageIndex: pageIndex,
+                pageCount: pageCount,
+                rowsPerPage: rowsPerPage,
+                from: startDate,
+                to: endDate,
+                settings: settings
+            )
+            context.endPDFPage()
+        }
+
+        context.closePDF()
+        try data.write(to: url, options: .atomic)
+    }
+
+    private static func drawPage(
+        context: CGContext,
+        rect: CGRect,
+        records: [UnlockRecord],
+        pageIndex: Int,
+        pageCount: Int,
+        rowsPerPage: Int,
+        from startDate: Date,
+        to endDate: Date,
+        settings: WorkSettings
+    ) {
+        NSGraphicsContext.saveGraphicsState()
+        let graphicsContext = NSGraphicsContext(cgContext: context, flipped: false)
+        NSGraphicsContext.current = graphicsContext
+        context.saveGState()
+        context.translateBy(x: 0, y: rect.height)
+        context.scaleBy(x: 1, y: -1)
+
+        NSColor.white.setFill()
+        NSBezierPath(rect: rect).fill()
+        drawWatermark(in: rect)
+
+        let titleAttributes: [NSAttributedString.Key: Any] = [
+            .font: NSFont.boldSystemFont(ofSize: 22),
+            .foregroundColor: NSColor.labelColor
+        ]
+        let subtitleAttributes: [NSAttributedString.Key: Any] = [
+            .font: NSFont.systemFont(ofSize: 11),
+            .foregroundColor: NSColor.secondaryLabelColor
+        ]
+        let headerAttributes: [NSAttributedString.Key: Any] = [
+            .font: NSFont.boldSystemFont(ofSize: 12),
+            .foregroundColor: NSColor.labelColor
+        ]
+        let bodyAttributes: [NSAttributedString.Key: Any] = [
+            .font: NSFont.monospacedDigitSystemFont(ofSize: 12, weight: .regular),
+            .foregroundColor: NSColor.labelColor
+        ]
+
+        let margin: CGFloat = 54
+        let rangeText = "\(dateString(startDate)) - \(dateString(endDate))"
+        ("OffTick Unlock Records" as NSString).draw(at: NSPoint(x: margin, y: 46), withAttributes: titleAttributes)
+        ("Range: \(rangeText)    Generated: \(dateTimeString(Date()))    Bundle: \(Bundle.main.bundleIdentifier ?? "unknown")" as NSString)
+            .draw(at: NSPoint(x: margin, y: 76), withAttributes: subtitleAttributes)
+        ("Mode: \(settings.mode.storageValue)    Daily Hours: \(String(format: "%.1f", settings.dailyWorkHours))" as NSString)
+            .draw(at: NSPoint(x: margin, y: 94), withAttributes: subtitleAttributes)
+
+        drawLine(from: CGPoint(x: margin, y: 122), to: CGPoint(x: rect.width - margin, y: 122))
+        ("Date" as NSString).draw(at: NSPoint(x: margin, y: 138), withAttributes: headerAttributes)
+        ("First Unlock Time" as NSString).draw(at: NSPoint(x: margin + 180, y: 138), withAttributes: headerAttributes)
+        ("Recorded At" as NSString).draw(at: NSPoint(x: margin + 330, y: 138), withAttributes: headerAttributes)
+        drawLine(from: CGPoint(x: margin, y: 160), to: CGPoint(x: rect.width - margin, y: 160))
+
+        let startIndex = pageIndex * rowsPerPage
+        let endIndex = min(records.count, startIndex + rowsPerPage)
+        let pageRecords = records[startIndex..<endIndex]
+        var y: CGFloat = 178
+        for record in pageRecords {
+            (record.dateKey as NSString).draw(at: NSPoint(x: margin, y: y), withAttributes: bodyAttributes)
+            (timeString(record.unlockDate) as NSString).draw(at: NSPoint(x: margin + 180, y: y), withAttributes: bodyAttributes)
+            (dateTimeString(record.unlockDate) as NSString).draw(at: NSPoint(x: margin + 330, y: y), withAttributes: bodyAttributes)
+            y += 22
+        }
+
+        drawLine(from: CGPoint(x: margin, y: rect.height - 58), to: CGPoint(x: rect.width - margin, y: rect.height - 58))
+        ("OffTick local export - page \(pageIndex + 1)/\(pageCount)" as NSString)
+            .draw(at: NSPoint(x: margin, y: rect.height - 44), withAttributes: subtitleAttributes)
+
+        context.restoreGState()
+        NSGraphicsContext.current = nil
+        NSGraphicsContext.restoreGraphicsState()
+    }
+
+    private static func drawWatermark(in rect: CGRect) {
+        let attributes: [NSAttributedString.Key: Any] = [
+            .font: NSFont.boldSystemFont(ofSize: 76),
+            .foregroundColor: NSColor.black.withAlphaComponent(0.055)
+        ]
+        let text = "OffTick"
+        let size = (text as NSString).size(withAttributes: attributes)
+        NSGraphicsContext.saveGraphicsState()
+        let transform = NSAffineTransform()
+        transform.translateX(by: rect.midX, yBy: rect.midY)
+        transform.rotate(byDegrees: -28)
+        transform.concat()
+        (text as NSString).draw(at: NSPoint(x: -size.width / 2, y: -size.height / 2), withAttributes: attributes)
+        NSGraphicsContext.restoreGraphicsState()
+    }
+
+    private static func drawLine(from start: CGPoint, to end: CGPoint) {
+        NSColor.separatorColor.setStroke()
+        let path = NSBezierPath()
+        path.move(to: start)
+        path.line(to: end)
+        path.lineWidth = 0.8
+        path.stroke()
+    }
+
+    private static func dateString(_ date: Date) -> String {
+        dateFormatter.dateFormat = "yyyy-MM-dd"
+        return dateFormatter.string(from: date)
+    }
+
+    private static func timeString(_ date: Date) -> String {
+        dateFormatter.dateFormat = "HH:mm:ss"
+        return dateFormatter.string(from: date)
+    }
+
+    private static func dateTimeString(_ date: Date) -> String {
+        dateFormatter.dateFormat = "yyyy-MM-dd HH:mm:ss"
+        return dateFormatter.string(from: date)
+    }
+
+    private static let dateFormatter: DateFormatter = {
+        let formatter = DateFormatter()
+        formatter.calendar = Calendar.beijing
+        formatter.locale = Locale(identifier: "en_US_POSIX")
+        formatter.timeZone = TimeZone(identifier: "Asia/Shanghai")
+        return formatter
+    }()
 }
