@@ -35,7 +35,15 @@ swift build
 open .build/OffTick.app
 ```
 
-菜单栏应用建议通过 `.app` 启动。脚本会生成稳定的 Bundle ID（`dev.local.OffTick`）并在写入 `Info.plist` 后对整个 app 重新签名，避免系统设置里出现多个同名 OffTick 或开关不对应当前运行版本。
+菜单栏应用建议通过 `.app` 启动。脚本会生成稳定的 Bundle ID（默认 `online.eveoh.offtick`）并在写入 `Info.plist` 后对整个 app 重新签名，避免系统设置里出现多个同名 OffTick 或开关不对应当前运行版本。
+
+## 本地测试分发
+
+```bash
+./Scripts/package-local.sh
+```
+
+脚本会生成 `dist/OffTick-0.1.0-local.zip`。这是未公证的本地测试包，适合小范围发给朋友试用；对方第一次打开时可能需要按住 Control 键点击 App 后选择“打开”，或到“系统设置 > 隐私与安全性”里点击“仍要打开”。
 
 ## 下一步
 

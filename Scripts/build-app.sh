@@ -3,6 +3,9 @@ set -euo pipefail
 
 ROOT_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")/.." && pwd)"
 CONFIGURATION="${CONFIGURATION:-release}"
+BUNDLE_ID="${BUNDLE_ID:-online.eveoh.offtick}"
+MARKETING_VERSION="${MARKETING_VERSION:-0.1.0}"
+BUILD_VERSION="${BUILD_VERSION:-1}"
 swift build -c "$CONFIGURATION" --package-path "$ROOT_DIR"
 BUILD_DIR="$(swift build -c "$CONFIGURATION" --show-bin-path)"
 APP_DIR="$ROOT_DIR/.build/OffTick.app"
@@ -27,7 +30,7 @@ cat > "$CONTENTS_DIR/Info.plist" <<'PLIST'
     <key>CFBundleExecutable</key>
     <string>OffTick</string>
     <key>CFBundleIdentifier</key>
-    <string>dev.local.OffTick</string>
+    <string>__BUNDLE_ID__</string>
     <key>CFBundleName</key>
     <string>OffTick</string>
     <key>CFBundleDisplayName</key>
@@ -35,9 +38,9 @@ cat > "$CONTENTS_DIR/Info.plist" <<'PLIST'
     <key>CFBundlePackageType</key>
     <string>APPL</string>
     <key>CFBundleShortVersionString</key>
-    <string>0.1.0</string>
+    <string>__MARKETING_VERSION__</string>
     <key>CFBundleVersion</key>
-    <string>1</string>
+    <string>__BUILD_VERSION__</string>
     <key>LSMinimumSystemVersion</key>
     <string>12.0</string>
     <key>LSUIElement</key>
@@ -48,7 +51,11 @@ cat > "$CONTENTS_DIR/Info.plist" <<'PLIST'
 </plist>
 PLIST
 
+env BUNDLE_ID="$BUNDLE_ID" MARKETING_VERSION="$MARKETING_VERSION" BUILD_VERSION="$BUILD_VERSION" \
+    perl -0pi -e 's/__BUNDLE_ID__/$ENV{BUNDLE_ID}/g; s/__MARKETING_VERSION__/$ENV{MARKETING_VERSION}/g; s/__BUILD_VERSION__/$ENV{BUILD_VERSION}/g' "$CONTENTS_DIR/Info.plist"
+
 printf 'APPL????' > "$CONTENTS_DIR/PkgInfo"
+xattr -cr "$APP_DIR"
 codesign --force --deep --sign - "$APP_DIR"
 
 echo "$APP_DIR"

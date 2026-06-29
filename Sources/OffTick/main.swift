@@ -3,7 +3,7 @@ import Darwin
 import UserNotifications
 
 final class OffTickApp: NSObject, NSApplicationDelegate {
-    private let statusItemAutosaveName = "dev.local.OffTick.statusItem"
+    private let statusItemAutosaveName = "\(Bundle.main.bundleIdentifier ?? "online.eveoh.offtick").statusItem"
     private var statusItem: NSStatusItem!
     private var panel: NSPanel!
     private var stackView: NSStackView!
