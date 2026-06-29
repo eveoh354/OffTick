@@ -1440,6 +1440,8 @@ enum CurrencyUnit: String, CaseIterable {
     case twd
     case aud
     case cad
+    case brl
+    case rub
 
     var storageValue: String {
         rawValue
@@ -1467,6 +1469,10 @@ enum CurrencyUnit: String, CaseIterable {
             return "A$"
         case .cad:
             return "C$"
+        case .brl:
+            return "R$"
+        case .rub:
+            return "₽"
         }
     }
 
@@ -1486,8 +1492,57 @@ enum CurrencyUnit: String, CaseIterable {
         String(format: "\(symbol)%.2f", amount)
     }
 
+    static var systemDefault: CurrencyUnit {
+        if let currencyCode = Locale.current.currencyCode,
+           let currencyUnit = CurrencyUnit(rawValue: currencyCode.lowercased()) {
+            return currencyUnit
+        }
+
+        for identifier in Locale.preferredLanguages {
+            let normalized = identifier.replacingOccurrences(of: "_", with: "-").lowercased()
+            if normalized.hasPrefix("zh-hant") || normalized.hasPrefix("zh-tw") {
+                return .twd
+            }
+            if normalized.hasPrefix("zh-hk") || normalized.hasPrefix("zh-mo") {
+                return .hkd
+            }
+            if normalized.hasPrefix("zh") {
+                return .cny
+            }
+            if normalized.hasPrefix("ja") {
+                return .jpy
+            }
+            if normalized.hasPrefix("ko") {
+                return .krw
+            }
+            if normalized.hasPrefix("pt") {
+                return .brl
+            }
+            if normalized.hasPrefix("ru") {
+                return .rub
+            }
+            if normalized.hasPrefix("en-gb") {
+                return .gbp
+            }
+            if normalized.hasPrefix("en-au") {
+                return .aud
+            }
+            if normalized.hasPrefix("en-ca") {
+                return .cad
+            }
+            if normalized.hasPrefix("es") || normalized.hasPrefix("fr") || normalized.hasPrefix("de") {
+                return .eur
+            }
+            if normalized.hasPrefix("en") {
+                return .usd
+            }
+        }
+
+        return .usd
+    }
+
     init(storageValue: String) {
-        self = CurrencyUnit(rawValue: storageValue) ?? .cny
+        self = CurrencyUnit(rawValue: storageValue) ?? .systemDefault
     }
 }
 
@@ -2330,7 +2385,7 @@ struct WorkSettings {
     static func defaultSettings(for date: Date) -> WorkSettings {
         WorkSettings(
             monthlyIncome: 10_000,
-            currencyUnit: .cny,
+            currencyUnit: .systemDefault,
             workdaysInMonth: ChinaWorkCalendar.workdaysInMonth(containing: date),
             dailyWorkHours: 8,
             fixedStartHour: 9,
