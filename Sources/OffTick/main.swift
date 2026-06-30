@@ -555,7 +555,7 @@ final class OffTickApp: NSObject, NSApplicationDelegate {
         }
 
         let now = timeProvider.now
-        let calendar = Calendar.beijing
+        let calendar = Calendar.userGregorian
         let defaultStart = calendar.date(byAdding: .month, value: -1, to: now) ?? now
         let dateFormatter = Self.exportDateFormatter
 
@@ -644,9 +644,9 @@ final class OffTickApp: NSObject, NSApplicationDelegate {
 
     private static let exportDateFormatter: DateFormatter = {
         let formatter = DateFormatter()
-        formatter.calendar = Calendar.beijing
+        formatter.calendar = Calendar.userGregorian
         formatter.locale = Locale(identifier: "en_US_POSIX")
-        formatter.timeZone = TimeZone(identifier: "Asia/Shanghai")
+        formatter.timeZone = Calendar.userGregorian.timeZone
         formatter.dateFormat = "yyyy-MM-dd"
         return formatter
     }()
@@ -2632,7 +2632,7 @@ struct WorkSettings {
             let start = fixedStartDate(on: date)
             var end = fixedClockOutDate(on: date)
             if end <= start {
-                end = Calendar.beijing.date(byAdding: .day, value: 1, to: end) ?? end
+                end = Calendar.userGregorian.date(byAdding: .day, value: 1, to: end) ?? end
             }
             return max(60, end.timeIntervalSince(start))
         case .unlockTimer:
@@ -2641,7 +2641,7 @@ struct WorkSettings {
     }
 
     func fixedStartDate(on date: Date) -> Date {
-        Calendar.beijing.date(
+        Calendar.userGregorian.date(
             bySettingHour: fixedStartHour,
             minute: fixedStartMinute,
             second: 0,
@@ -2650,7 +2650,7 @@ struct WorkSettings {
     }
 
     func fixedClockOutDate(on date: Date) -> Date {
-        Calendar.beijing.date(
+        Calendar.userGregorian.date(
             bySettingHour: fixedClockOutHour,
             minute: fixedClockOutMinute,
             second: 0,
@@ -2660,10 +2660,10 @@ struct WorkSettings {
 }
 
 extension Calendar {
-    static var beijing: Calendar {
+    static var userGregorian: Calendar {
         var calendar = Calendar(identifier: .gregorian)
-        calendar.timeZone = TimeZone(identifier: "Asia/Shanghai") ?? .current
-        calendar.locale = Locale(identifier: "zh_CN")
+        calendar.timeZone = .current
+        calendar.locale = .current
         return calendar
     }
 }
@@ -2915,10 +2915,10 @@ struct OffTickSnapshot {
     func dateText() -> String {
         let formatter = DateFormatter()
         formatter.locale = Locale(identifier: settings.language.localeIdentifier)
-        formatter.timeZone = TimeZone(identifier: "Asia/Shanghai")
+        formatter.timeZone = Calendar.userGregorian.timeZone
         switch settings.calendarMode {
         case .gregorian:
-            formatter.calendar = Calendar.beijing
+            formatter.calendar = Calendar.userGregorian
             if settings.language == .simplifiedChinese || settings.language == .traditionalChinese {
                 formatter.dateFormat = "yyyy年M月d日 EEEE"
             } else {
@@ -2928,7 +2928,7 @@ struct OffTickSnapshot {
             return formatter.string(from: now)
         case .lunar:
             var calendar = Calendar(identifier: .chinese)
-            calendar.timeZone = TimeZone(identifier: "Asia/Shanghai") ?? .current
+            calendar.timeZone = Calendar.userGregorian.timeZone
             formatter.calendar = calendar
             formatter.dateFormat = "U年M月d日 EEEE"
             return "\(L10n.text("lunar", language: settings.language)) \(formatter.string(from: now))"
@@ -2938,7 +2938,7 @@ struct OffTickSnapshot {
     func timeText() -> String {
         let formatter = DateFormatter()
         formatter.locale = Locale(identifier: settings.language.localeIdentifier)
-        formatter.timeZone = TimeZone(identifier: "Asia/Shanghai")
+        formatter.timeZone = Calendar.userGregorian.timeZone
         formatter.dateFormat = settings.timeFormat == .twentyFourHour ? "HH:mm:ss" : "a h:mm:ss"
         return formatter.string(from: now)
     }
@@ -2999,7 +2999,7 @@ struct OffTickSnapshot {
         case .fixedTime:
             var end = settings.fixedClockOutDate(on: now)
             if end <= workStartDate() {
-                end = Calendar.beijing.date(byAdding: .day, value: 1, to: end) ?? end
+                end = Calendar.userGregorian.date(byAdding: .day, value: 1, to: end) ?? end
             }
             return end
         case .unlockTimer:
@@ -3028,8 +3028,8 @@ struct WorkSessionClock {
 
     static func records(from startDate: Date, to endDate: Date) -> [UnlockRecord] {
         let defaults = UserDefaults.standard
-        let startDay = Calendar.beijing.startOfDay(for: startDate)
-        let endDay = Calendar.beijing.startOfDay(for: endDate)
+        let startDay = Calendar.userGregorian.startOfDay(for: startDate)
+        let endDay = Calendar.userGregorian.startOfDay(for: endDate)
 
         return defaults.dictionaryRepresentation().compactMap { key, value in
             guard key.hasPrefix("\(unlockDatePrefix)-"),
@@ -3037,7 +3037,7 @@ struct WorkSessionClock {
                 return nil
             }
 
-            let recordDay = Calendar.beijing.startOfDay(for: unlockDate)
+            let recordDay = Calendar.userGregorian.startOfDay(for: unlockDate)
             guard recordDay >= startDay && recordDay <= endDay else {
                 return nil
             }
@@ -3057,7 +3057,7 @@ struct WorkSessionClock {
     }
 
     private static func isAfterFiveAM(_ date: Date) -> Bool {
-        let start = Calendar.beijing.date(bySettingHour: 5, minute: 0, second: 0, of: date) ?? date
+        let start = Calendar.userGregorian.date(bySettingHour: 5, minute: 0, second: 0, of: date) ?? date
         return date >= start
     }
 
@@ -3066,7 +3066,7 @@ struct WorkSessionClock {
     }
 
     static func dateKey(_ date: Date) -> String {
-        let components = Calendar.beijing.dateComponents([.year, .month, .day], from: date)
+        let components = Calendar.userGregorian.dateComponents([.year, .month, .day], from: date)
         return String(format: "%04d-%02d-%02d", components.year ?? 0, components.month ?? 0, components.day ?? 0)
     }
 }
@@ -3381,9 +3381,9 @@ enum UnlockRecordsPDFExporter {
 
     private static let dateFormatter: DateFormatter = {
         let formatter = DateFormatter()
-        formatter.calendar = Calendar.beijing
+        formatter.calendar = Calendar.userGregorian
         formatter.locale = Locale(identifier: "en_US_POSIX")
-        formatter.timeZone = TimeZone(identifier: "Asia/Shanghai")
+        formatter.timeZone = Calendar.userGregorian.timeZone
         return formatter
     }()
 
