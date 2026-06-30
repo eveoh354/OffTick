@@ -3,9 +3,9 @@
 OffTick is a lightweight macOS menu bar app that keeps a floating workday timer on screen. It shows the current date and time, counts down to clock-out, and can estimate live earnings for the day.
 
 <p>
-  <img src="Assets/offtick-demo.gif" alt="OffTick demo" width="260">
-  <img src="Assets/offtick-menu.png" alt="OffTick menu" width="220">
-  <img src="Assets/offtick-settings.png" alt="OffTick settings" width="220">
+  <img src="Assets/offtick-demo.gif" alt="OffTick demo" height="220">
+  <img src="Assets/offtick-menu.png" alt="OffTick menu" height="220">
+  <img src="Assets/offtick-settings.png" alt="OffTick settings" height="220">
 </p>
 
 中文说明见下方：[简体中文](#简体中文)。
