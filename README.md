@@ -57,17 +57,17 @@ For normal use, launch OffTick through the `.app` bundle. The script writes a st
 
 The script creates:
 
-- `dist/OffTick-0.1.1.zip`
-- `dist/OffTick-0.1.1.zip.sha256`
-- `dist/RELEASE_NOTES-0.1.1.md`
+- `dist/OffTick-0.1.2.zip`
+- `dist/OffTick-0.1.2.zip.sha256`
+- `dist/RELEASE_NOTES-0.1.2.md`
 
 This package is locally signed but not notarized by Apple. On first launch, macOS may require opening the app with Control-click > Open, or approving it in System Settings > Privacy & Security.
 
 ### GitHub Release Checklist
 
-1. Upload `OffTick-0.1.1.zip` to the GitHub Release.
-2. Paste the generated SHA256 value from `OffTick-0.1.1.zip.sha256`.
-3. Paste the generated release notes from `RELEASE_NOTES-0.1.1.md`.
+1. Upload `OffTick-0.1.2.zip` to the GitHub Release.
+2. Paste the generated SHA256 value from `OffTick-0.1.2.zip.sha256`.
+3. Paste the generated release notes from `RELEASE_NOTES-0.1.2.md`.
 4. Clearly state that the build is locally signed and not notarized by Apple.
 
 GitHub Release asset download counts can be used as a rough, privacy-friendly usage signal. OffTick does not include hidden analytics telemetry.
@@ -131,17 +131,17 @@ open .build/OffTick.app
 
 脚本会生成：
 
-- `dist/OffTick-0.1.1.zip`
-- `dist/OffTick-0.1.1.zip.sha256`
-- `dist/RELEASE_NOTES-0.1.1.md`
+- `dist/OffTick-0.1.2.zip`
+- `dist/OffTick-0.1.2.zip.sha256`
+- `dist/RELEASE_NOTES-0.1.2.md`
 
 这是本地签名但未经过 Apple 公证的测试包，适合小范围试用。第一次打开时，macOS 可能需要按住 Control 键点击 App 后选择“打开”，或到“系统设置 > 隐私与安全性”里点击“仍要打开”。
 
 ### GitHub Release 发布清单
 
-1. 上传 `OffTick-0.1.1.zip` 到 GitHub Release。
-2. 把 `OffTick-0.1.1.zip.sha256` 里的 SHA256 值贴到 Release notes。
-3. 把 `RELEASE_NOTES-0.1.1.md` 里的说明贴到 Release notes。
+1. 上传 `OffTick-0.1.2.zip` 到 GitHub Release。
+2. 把 `OffTick-0.1.2.zip.sha256` 里的 SHA256 值贴到 Release notes。
+3. 把 `RELEASE_NOTES-0.1.2.md` 里的说明贴到 Release notes。
 4. 明确说明这是本地签名、未经过 Apple 公证的测试版。
 
 GitHub Release 的资源下载次数可以作为粗略、隐私友好的使用量参考。OffTick 不包含隐藏的数据埋点。

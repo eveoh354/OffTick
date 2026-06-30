@@ -3,7 +3,7 @@ set -euo pipefail
 
 ROOT_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")/.." && pwd)"
 APP_NAME="OffTick"
-VERSION="${MARKETING_VERSION:-0.1.1}"
+VERSION="${MARKETING_VERSION:-0.1.2}"
 DIST_DIR="$ROOT_DIR/dist"
 PACKAGE_DIR="$DIST_DIR/$APP_NAME-$VERSION"
 ZIP_PATH="$DIST_DIR/$APP_NAME-$VERSION.zip"
@@ -12,8 +12,10 @@ RELEASE_NOTES_PATH="$DIST_DIR/RELEASE_NOTES-$VERSION.md"
 
 APP_DIR="$("$ROOT_DIR/Scripts/build-app.sh" | tail -n 1)"
 
-rm -rf "$PACKAGE_DIR" "$ZIP_PATH" "$CHECKSUM_PATH" "$RELEASE_NOTES_PATH" \
-    "$DIST_DIR/$APP_NAME-$VERSION-local" "$DIST_DIR/$APP_NAME-$VERSION-local.zip"
+rm -rf "$DIST_DIR/$APP_NAME"-*.zip \
+    "$DIST_DIR/$APP_NAME"-*.zip.sha256 \
+    "$DIST_DIR/RELEASE_NOTES"-*.md \
+    "$DIST_DIR/$APP_NAME"-*/
 mkdir -p "$PACKAGE_DIR"
 cp -R "$APP_DIR" "$PACKAGE_DIR/"
 

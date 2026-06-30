@@ -167,15 +167,30 @@ final class OffTickApp: NSObject, NSApplicationDelegate {
     }
 
     private func statusIcon() -> NSImage? {
-        let image: NSImage?
+        var image: NSImage?
         if let url = Bundle.module.url(forResource: "OffTickStatusTemplate", withExtension: "png") {
             image = NSImage(contentsOf: url)
+            image = image.flatMap { enlargedStatusIcon(from: $0) }
         } else {
             image = NSImage(systemSymbolName: "clock", accessibilityDescription: "OffTick")
         }
-        image?.size = NSSize(width: 18, height: 18)
+        image?.size = NSSize(width: 20, height: 20)
         image?.isTemplate = true
         return image
+    }
+
+    private func enlargedStatusIcon(from image: NSImage) -> NSImage {
+        let icon = NSImage(size: NSSize(width: 20, height: 20))
+        icon.lockFocus()
+        image.draw(
+            in: NSRect(x: 0, y: 0, width: 20, height: 20),
+            from: NSRect(x: 5, y: 4, width: 26, height: 26),
+            operation: .sourceOver,
+            fraction: 1
+        )
+        icon.unlockFocus()
+        icon.isTemplate = true
+        return icon
     }
 
     private func setupPanel() {
@@ -3229,7 +3244,8 @@ enum UnlockRecordsPDFExporter {
         )
 
         let rangeText = "\(dateString(startDate)) - \(dateString(endDate))"
-        (text.title as NSString).draw(at: NSPoint(x: margin, y: 46), withAttributes: titleAttributes)
+        drawLogo(in: NSRect(x: margin, y: 43, width: 26, height: 26))
+        (text.title as NSString).draw(at: NSPoint(x: margin + 34, y: 46), withAttributes: titleAttributes)
         ("\(text.range): \(rangeText)    \(text.generated): \(dateTimeString(generatedAt))    \(text.bundle): \(Bundle.main.bundleIdentifier ?? "unknown")" as NSString)
             .draw(at: NSPoint(x: margin, y: 76), withAttributes: subtitleAttributes)
         ("\(text.mode): \(settings.mode.storageValue)    \(text.dailyHours): \(String(format: "%.1f", settings.dailyWorkHours))" as NSString)
@@ -3279,9 +3295,13 @@ enum UnlockRecordsPDFExporter {
             lines.append(dateTimeString(generatedAt))
         }
 
-        let maxWidth = lines.map { line in
+        let watermarkLogoSize: CGFloat = 15
+        let watermarkLogoGap: CGFloat = 4
+        let brandTextWidth = ("OffTick" as NSString).size(withAttributes: titleAttributes).width
+        let brandWidth = watermarkLogoSize + watermarkLogoGap + brandTextWidth
+        let maxWidth = max(brandWidth, lines.map { line in
             (line as NSString).size(withAttributes: line == "OffTick" ? titleAttributes : detailAttributes).width
-        }.max() ?? 0
+        }.max() ?? 0)
         let lineHeight: CGFloat = 16
         let blockHeight = max(lineHeight, CGFloat(lines.count) * lineHeight)
         let xStep = min(max(maxWidth + 58, 92), 170)
@@ -3296,15 +3316,43 @@ enum UnlockRecordsPDFExporter {
                 transform.translateX(by: x, yBy: y)
                 transform.rotate(byDegrees: -20)
                 transform.concat()
+                let blockX = -maxWidth / 2
                 for (index, line) in lines.enumerated() {
                     let attributes = line == "OffTick" ? titleAttributes : detailAttributes
-                    (line as NSString).draw(at: NSPoint(x: -maxWidth / 2, y: -blockHeight / 2 + CGFloat(index) * lineHeight), withAttributes: attributes)
+                    let y = -blockHeight / 2 + CGFloat(index) * lineHeight
+                    if line == "OffTick" {
+                        drawLogo(
+                            in: NSRect(x: blockX, y: y + 0.5, width: watermarkLogoSize, height: watermarkLogoSize),
+                            fraction: 0.055
+                        )
+                        (line as NSString).draw(
+                            at: NSPoint(x: blockX + watermarkLogoSize + watermarkLogoGap, y: y),
+                            withAttributes: attributes
+                        )
+                    } else {
+                        (line as NSString).draw(at: NSPoint(x: blockX, y: y), withAttributes: attributes)
+                    }
                 }
                 NSGraphicsContext.restoreGraphicsState()
                 x += xStep
             }
             y += yStep
         }
+    }
+
+    private static func drawLogo(in rect: NSRect, fraction: CGFloat = 1) {
+        guard let image = logoImage else {
+            return
+        }
+
+        image.draw(
+            in: rect,
+            from: logoSourceRect,
+            operation: .sourceOver,
+            fraction: fraction,
+            respectFlipped: true,
+            hints: nil
+        )
     }
 
     private static func drawLine(from start: CGPoint, to end: CGPoint) {
@@ -3338,4 +3386,15 @@ enum UnlockRecordsPDFExporter {
         formatter.timeZone = TimeZone(identifier: "Asia/Shanghai")
         return formatter
     }()
+
+    private static let logoImage: NSImage? = {
+        guard let url = Bundle.module.url(forResource: "AppIcon", withExtension: "png"),
+              let image = NSImage(contentsOf: url) else {
+            return nil
+        }
+
+        return image
+    }()
+
+    private static let logoSourceRect = NSRect(x: 188, y: 168, width: 660, height: 660)
 }
