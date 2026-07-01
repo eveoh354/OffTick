@@ -10,8 +10,6 @@ OffTick is a lightweight macOS menu bar app that keeps a floating workday timer 
 
 中文说明见下方：[简体中文](#简体中文)。
 
-Icon note: the official app icon will be provided later.
-
 ## English
 
 ### Features
@@ -85,8 +83,6 @@ OffTick is released under the MIT License.
 ## 简体中文
 
 OffTick 是一个轻量 macOS 菜单栏小工具，用置顶悬浮窗显示日期、时间、下班倒计时和收入进度。
-
-图标说明：正式图标稍后提供。
 
 ### 功能
 
